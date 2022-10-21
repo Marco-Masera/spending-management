@@ -26,7 +26,7 @@
 
     <ion-item>
       <ion-label>Your budget</ion-label>
-      <ion-input type="number" v-model="budget" placeholder="0.00 $"></ion-input>
+      <ion-input @click="onInputClick($event)" type="number" v-model="budget.budget" placeholder="0.00 $"></ion-input>
     </ion-item>
 
     <ion-list>
@@ -46,7 +46,7 @@
 
 
     <p :visible="isfirst">New budget will be applied to current month.</p>
-    <ion-button :disabled="budget==0" @click="saveBudget">Save</ion-button>
+    <ion-button :disabled="budget==0"  @click="saveBudget">Save</ion-button>
 
 
     <ion-item-divider>
@@ -59,7 +59,7 @@
       <ion-label>Currency</ion-label>
       <ion-input type="text" v-model="currency" placeholder=""></ion-input>
     </ion-item>
-    <ion-button @click="saveBudget">model.set_default_value(currency)</ion-button>
+    <ion-button @click="updateCurrency">Update default currency</ion-button>
 
 
     <ion-item-divider>
@@ -72,8 +72,6 @@
     <ion-chip v-for="(item, index) in categories" 
     :key="item"
     :color=colors[index%5]
-    :outline="selectedCategory==item"
-    @click="selectedCategory = item"
     >
         {{item}}
         <ion-icon :icon="closeCircle" @click="deleteC(item)"></ion-icon>
@@ -100,11 +98,10 @@
 
 <script lang="ts">
 import { useRouter } from 'vue-router';
-import { IonRadio, IonRadioGroup, IonContent,IonBackButton, toastController, IonInput , IonHeader, IonPage, IonItem, IonLabel, IonList, IonItemDivider, IonTitle, IonToolbar, IonCard, IonCardContent, IonCardHeader, IonCardSubtitle, IonCardTitle } from '@ionic/vue';
+import { IonIcon, IonChip, IonButtons, IonButton, IonPopover, IonRadio, IonRadioGroup, IonContent,IonBackButton, toastController, IonInput , IonHeader, IonPage, IonItem, IonLabel, IonList, IonItemDivider, IonTitle, IonToolbar } from '@ionic/vue';
 import { model } from '../data/model'
 import { defineComponent } from 'vue';
 import { closeCircle } from 'ionicons/icons';
-import { getMessages } from '@/data/messages';
 
 export default defineComponent({
   name: 'HomePage',
@@ -114,13 +111,13 @@ export default defineComponent({
   },
   data() {
     return {
-      currency: model.get_default_value(),
-      isfirst: model.is_first_configuration(),
-      categories: model.get_categories(),
+      currency: "",
+      isfirst: true,
+      categories: [''],
       colors: ["primary", "secondary", "tertiary", "success", "warning"],
       isAdding: false,
       newCatName: "",
-      budget: 0,
+      budget: {budget:0, type:0},
       budget_time: 'monthly',
       getBackButtonText: () => {
         const win = window as any;
@@ -130,12 +127,28 @@ export default defineComponent({
     }
   },
   methods: {
-    saveBudget(){
+    updateCurrency(){
+      model.set_default_value(this.$data.currency)
+    },
+    onInputClick(nativeEl:any){
+      nativeEl.target.autofocus=true;
+      nativeEl.target.select();
+    },
+    async init(){
+      this.$data.isfirst = !(await model.init())
+      this.$data.currency = model.get_default_value()
+      this.$data.categories = model.get_categories()
+      this.$data.budget = model.get_budget()
+      if (this.$data.budget.type != 0){
+        this.$data.budget_time = "daily"
+      }
+    },
+    async saveBudget(){
         let x = 0
         if (this.$data.budget_time == 'daily'){
             x = 1
         }
-        model.set_budget(this.$data.budget, x)
+        await model.set_budget(x,this.$data.budget.budget)
         this.router.replace({ path: '/home' })
     },
     deleteC(item:string){
@@ -169,7 +182,11 @@ export default defineComponent({
     IonPage,
     IonTitle,
     IonToolbar,
-    IonRadio, IonRadioGroup
+    IonRadio, IonRadioGroup,
+    IonButton,IonButtons,IonLabel, IonChip, IonIcon,IonList, IonItem, IonItemDivider,IonPopover
   },
+  created(){
+    this.init()
+  }
 });
 </script>

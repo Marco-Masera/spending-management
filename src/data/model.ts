@@ -79,10 +79,13 @@ export const model: any = {
     weekly_exp: undefined,
     monthly_exp: undefined,
 
-    async load_month(month: number, year: number):Promise<MonthStorage>{
+    async load_month(month: number, year: number, doNotCreate = false):Promise<MonthStorage | undefined>{
         const key = month + "_" + year 
         let m: MonthStorage = await this.storage.get(key)
         if (m == undefined){
+            if (doNotCreate){
+                return undefined
+            }
             m = {
                 tot_spending:0,
                 daily_budget: get_daily_budget(this.settings.budget, month, year),
@@ -91,6 +94,9 @@ export const model: any = {
                 spending: []
             },
             await this.storage.set(key, m)
+        } else {
+            m.tot_spending = Number(m.tot_spending)
+            m.daily_budget = Number(m.daily_budget)
         }
         return m
     }, 
@@ -108,6 +114,20 @@ export const model: any = {
         await this.storage.set(key, month)
     },
 
+    async test(){
+        const o = await this.load_month(8, 2022)
+        o.tot_spending = 1000
+        o.daily_budget = 30
+        o.spending.push(
+            {
+                cost: 30,
+                date: new Date(2022, 8, 29),
+                category: "A"
+            }
+        ) 
+        await this.save_month(o)
+    },
+
     //Returns false if it is first time
     async init(): Promise<boolean>{
         if (this.isInit){
@@ -115,10 +135,11 @@ export const model: any = {
         }
         this.isInit = true
         await this.storage.create();
+        //await this.storage.clear()
         this.settings = await this.storage.get('settings');
         if (this.settings == undefined){
             this.settings = {
-                currency: "$",
+                currency: "€",
                 language: "en",
                 categories: ['A', 'B', 'Ciao', 'Rerere', 'sdfsdf'],
                 date: new Date(Date.now()),
@@ -129,9 +150,10 @@ export const model: any = {
             }
             console.log("created")
             await this.storage.set('settings', this.settings)
+            await this.test()
             return false
         } else {
-            this.settings.date = new Date(Date.now())
+            this.settings.date =new Date(2022, 9, 2) //new Date(Date.now())
             return true
         }
         
@@ -146,7 +168,11 @@ export const model: any = {
         //Must update last month budget!
         const m: MonthStorage = await this.load_current_month()
         m.daily_budget = get_daily_budget(this.settings.budget, m.month, m.year)
-        this.save_month(m)
+        await this.save_month(m)
+    },
+
+    get_budget: function(): Budget{
+        return this.settings.budget 
     },
 
     get_categories: function(): string[]{
@@ -173,6 +199,7 @@ export const model: any = {
     },
     set_default_value(value: string){
         this.settings.currency = value
+        this.storage.set('settings', this.settings)
     },
 
     //Expenses:
@@ -180,19 +207,16 @@ export const model: any = {
         const date = new Date(Date.now())
         const r: ExpenseWithDate[] = []
         for (let i=0; i<n_months; i++){
-            const m = await this.load_month(date.getMonth(), date.getFullYear())
+            const m = await this.load_month(date.getMonth(), date.getFullYear(), true)
             if (m == undefined){
                 break;
             }
 
-            let sum = 0;
-            m.spending.forEach((s: SingleExpense) => {
-                sum += s.cost
-            })
+        
             const budget = m.daily_budget * getDaysInMonth(date.getMonth(), date.getFullYear())
             r.push({
-                total_sum: sum,
-                remains: budget - sum,
+                total_sum: m.tot_spending,
+                remains: round_n(budget - m.tot_spending),
                 date: getFormattedDate(date, this.settings.language)
             })
             date.setMonth(date.getMonth() - 1);
@@ -200,28 +224,28 @@ export const model: any = {
         return r
     },
 
-    async get_expenses_by_category(): Promise<string[][]>{
+    async get_expenses_by_category(): Promise<any[]>{
         const m = await this.load_current_month()
         const d:any = {}
         m.spending.forEach((element:SingleExpense) => {
             if (d[element.category]){
-                d[element.category] += element.cost 
+                d[element.category] += Number(element.cost)
             } else {
-                d[element.category] = element.cost 
+                d[element.category] = Number(element.cost)
             }
         });
-        let a = d.keys().map((key:string) => {
-            [key, d[key]]
-        })
-        a.sort((a: number[], b: number[]) =>a[1]-b[1] )
-        a = a.map((e:any) => {
-            [e[0], e[1].toString()]
-        })
+        console.log(d)
+        const a:any = []
+        for (const property in d) {
+            a.push([property, d[property]])
+        }
+        a.sort((a: any, b: any) =>b[1]-a[1] )
         return a
     },
 
     async get_all_month_expenses(): Promise<SingleExpense[]>{
         const m = await this.load_current_month()
+        m.spending.forEach((s:any)=>{s.cost = Number(s.cost)})
         return m.spending
     },
 
@@ -243,7 +267,7 @@ export const model: any = {
         const exp: Expense = {
             total_sum: m.tot_spending,
             max_budget: m.daily_budget * getDaysInMonth(m.month, m.year),
-            remains: (m.daily_budget*this.settings.date.getDate()) - m.tot_spending,
+            remains: round_n((m.daily_budget*this.settings.date.getDate()) - m.tot_spending),
             budget_as_today: (m.daily_budget*this.settings.date.getDate())
         }
         this.monthly_exp = exp
@@ -256,25 +280,31 @@ export const model: any = {
         }
         const m = await this.load_current_month()
         let weekSpending = 0
-        const targetDate = new Date()
-        targetDate.setDate(Date.now() - (this.settings.date.getDay()*86400000 ));
+        const targetDate = new Date(2022, 9, 2) //new Date(Date.now())
+        let dayOfWeek = targetDate.getDay()-1;
+        if (dayOfWeek == -1){
+            dayOfWeek = 6
+        }
+
+        targetDate.setDate(targetDate.getDate() - dayOfWeek);
+
         m.spending.forEach((s: SingleExpense) => {
-            if (s.date >= targetDate){
-                weekSpending += s.cost 
+            if (s.date.getTime() >= targetDate.getTime()){
+                weekSpending += Number(s.cost)
             }
         })
         if (targetDate.getMonth() < m.month){
             const old_m = await this.load_month(targetDate.getMonth(), targetDate.getFullYear())
             old_m.spending.forEach((s: SingleExpense) => {
-                if (s.date >= targetDate){
-                    weekSpending += s.cost 
+                if (s.date.getTime() >= targetDate.getTime()){
+                    weekSpending += Number(s.cost)
                 }
             })
         }
         const exp: Expense = {
             total_sum: weekSpending,
-            max_budget: m.daily_budget * getDaysInMonth(m.month, m.year),
-            remains: (m.daily_budget*(this.settings.date.getDay()+1)) - weekSpending,
+            max_budget: m.daily_budget * 7,
+            remains: round_n((m.daily_budget*(this.settings.date.getDay()+1)) - weekSpending),
             budget_as_today: m.daily_budget*(this.settings.date.getDay()+1)
         }
         this.weekly_exp = exp
@@ -283,6 +313,7 @@ export const model: any = {
 
     async add_expense(amount: number, category: string){
         const m = await this.load_current_month()
+        m.tot_spending =  Number(m.tot_spending) + Number(amount)
         m.spending.push(
             {
                 cost: amount,
@@ -290,7 +321,7 @@ export const model: any = {
                 category: category
             }
         ) 
-        this.save_month(m)
+        await this.save_month(m)
         if (this.weekly_exp != undefined){
             this.weekly_exp.total_sum += amount 
             this.weekly_exp.remains -= amount 
@@ -305,10 +336,14 @@ export const model: any = {
         this.weekly_exp = undefined
         this.monthly_exp = undefined 
         const m = await this.load_current_month()
-        m.spending = m.spending.filter((s: SingleExpense) => {
-            s.cost != expense.cost || s.date != expense.date || s.category!=expense.category
-        })
-        this.save_month(m)
+        m.tot_spending -= Number(expense.cost)
+        for (let i=0; i<m.spending.length; i++){
+            if (m.spending[i].cost == expense.cost && m.spending[i].date.getTime() == expense.date.getTime() && m.spending[i].category==expense.category){
+                m.spending.splice(i, 1)
+                break
+            }
+        }
+        await this.save_month(m)
     }
 
 }

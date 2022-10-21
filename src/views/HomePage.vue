@@ -22,29 +22,35 @@
 
       <ion-card>
         <ion-card-header>
-          <ion-card-title>{{monthly_exp.total_sum}} / {{monthly_exp.max_budget}} $</ion-card-title>
+          <ion-card-title>{{monthly_exp.total_sum}} / {{monthly_exp.max_budget}} {{currency}}</ion-card-title>
           <ion-card-subtitle>Monthly expenses</ion-card-subtitle>
         </ion-card-header>
 
-        <ion-card-content>
-          Currently {{monthly_exp.remains}} $ over selected budget.
+        <ion-card-content v-if="monthly_exp.remains>=0" style="color:green;">
+        You are saving {{monthly_exp.remains}} {{currency}} this month so far!
+        </ion-card-content>
+        <ion-card-content v-if="monthly_exp.remains<0" style="color:red;">
+        You are {{-monthly_exp.remains}} {{currency}} over your daily budget so far
         </ion-card-content>
       </ion-card>
 
       <ion-card>
         <ion-card-header>
-          <ion-card-title>{{weekly_exp.total_sum}} / {{weekly_exp.max_budget}} $</ion-card-title>
+          <ion-card-title>{{weekly_exp.total_sum}} / {{weekly_exp.max_budget}} {{currency}}</ion-card-title>
           <ion-card-subtitle>Weekly expenses</ion-card-subtitle>
         </ion-card-header>
 
-        <ion-card-content>
-          Currently {{weekly_exp.remaing}} $ over selected budget.
+        <ion-card-content v-if="weekly_exp.remains>=0" style="color:green;">
+        You are saving {{weekly_exp.remains}} {{currency}} this week so far!
+        </ion-card-content>
+        <ion-card-content v-if="weekly_exp.remains<0" style="color:red;">
+        You are {{-weekly_exp.remains}} {{currency}} over your daily budget so far
         </ion-card-content>
       </ion-card>
 
       <ion-item-divider>
         <ion-label>
-        Expenses by category
+        Expenses by category this month
         </ion-label>
       </ion-item-divider>
 
@@ -65,9 +71,9 @@
 
       <ion-list>
       <ion-item v-for="item in all_exp" :key="item">
-        <ion-label>{{item.date}}</ion-label>
+        <ion-label>{{item.date.getDate()}}/{{item.date.getMonth()+1}}/{{item.date.getFullYear()}}</ion-label>
         <ion-label>{{item.category}}</ion-label>
-        <ion-label>{{item.cost}}</ion-label>
+        <ion-label>{{item.cost}} {{currency}}</ion-label>
         <ion-button @click="deleteExpense(item)">X</ion-button>
       </ion-item>
       </ion-list>
@@ -83,10 +89,9 @@
 </template>
 
 <script lang="ts">
-import { IonContent,IonFab,IonFabButton, IonHeader, IonPage, IonItem, IonLabel, IonList, IonItemDivider, IonTitle, IonToolbar, IonCard, IonCardContent, IonCardHeader, IonCardSubtitle, IonCardTitle } from '@ionic/vue';
+import { IonIcon,IonButtons,IonButton, IonContent,IonFab,IonFabButton, IonHeader, IonPage, IonItem, IonLabel, IonList, IonItemDivider, IonTitle, IonToolbar, IonCard, IonCardContent, IonCardHeader, IonCardSubtitle, IonCardTitle } from '@ionic/vue';
 import { model } from '../data/model'
 import { defineComponent } from 'vue';
-import { getMessages } from '@/data/messages';
 import {add}from 'ionicons/icons';
 
 export default defineComponent({
@@ -96,18 +101,21 @@ export default defineComponent({
       monthly_exp: model.get_empty_expense(),
       weekly_exp:  model.get_empty_expense(),
       exp_by_cat: [],
+      currency: "€",
       all_exp: [],
     }
   },
   methods: {
     async deleteExpense(expense: any){
-      model.remove_expense(expense)
-      this.$data.all_exp = model.get_all_month_expenses()
+      await model.remove_expense(expense)
+      this.$data.all_exp = await model.get_all_month_expenses()
       this.$data.monthly_exp = await model.get_monthly_expense()
       this.$data.weekly_exp = await model.get_weekly_expense()
+      this.$data.exp_by_cat = await model.get_expenses_by_category()
     },
     async init(){
       await model.init()
+      this.$data.currency = model.get_default_value()
       model.get_monthly_expense().then((result:any) => this.$data.monthly_exp = result)
       model.get_weekly_expense().then((result:any) => this.$data.weekly_exp = result)
       model.get_expenses_by_category().then((result:any) => this.$data.exp_by_cat = result)
@@ -122,7 +130,15 @@ export default defineComponent({
     IonHeader,
     IonPage,
     IonTitle,
-    IonToolbar
+    IonToolbar,
+    IonFab,
+    IonFabButton,
+    IonItem,
+    IonLabel,
+    IonList,
+    IonItemDivider,
+    IonCard, IonCardContent, IonCardHeader, IonCardSubtitle, IonCardTitle,IonIcon, IonButtons,IonButton
+
   },
   setup() {
     return {add}

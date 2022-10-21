@@ -20,7 +20,7 @@
 
     <ion-item>
       <ion-label>Ampunt</ion-label>
-      <ion-input type="number" v-model="amount" placeholder="0.00 $"></ion-input>
+      <ion-input @click="onInputClick($event)" type="number" v-model="amount" placeholder="0.00 $"></ion-input>
     </ion-item>
 
     <ion-item-divider>
@@ -40,6 +40,7 @@
     </ion-chip>
     <ion-chip @click="isAdding=true" :color=colors[categories.length%5]>
         Add new
+        <ion-icon :icon="add"></ion-icon>
     </ion-chip>
 
 
@@ -62,20 +63,20 @@
 
 <script lang="ts">
 import { useRouter } from 'vue-router';
-import { IonContent,IonBackButton, toastController, IonInput , IonHeader, IonPage, IonItem, IonLabel, IonList, IonItemDivider, IonTitle, IonToolbar, IonCard, IonCardContent, IonCardHeader, IonCardSubtitle, IonCardTitle } from '@ionic/vue';
+import { IonIcon,IonPopover, IonChip, IonButton, IonButtons, IonContent,IonBackButton, toastController, IonInput , IonHeader, IonPage, IonItem, IonLabel, IonItemDivider, IonTitle, IonToolbar } from '@ionic/vue';
 import { model } from '../data/model'
+import { add } from 'ionicons/icons';
 import { defineComponent } from 'vue';
-import { getMessages } from '@/data/messages';
 
 export default defineComponent({
   name: 'HomePage',
   setup(){
     const router = useRouter();
-    return { router };
+    return { router, add };
   },
   data() {
     return {
-      categories: model.get_categories(),
+      categories: [''],
       colors: ["primary", "secondary", "tertiary", "success", "warning"],
       selectedCategory: "",
       isAdding: false,
@@ -89,8 +90,16 @@ export default defineComponent({
     }
   },
   methods: {
-    addExp(){
-        model.add_expense(this.$data.amount, this.$data.selectedCategory)
+    onInputClick(nativeEl:any){
+      nativeEl.target.autofocus=true;
+      nativeEl.target.select();
+    },
+    async init(){
+      await model.init()
+      this.$data.categories = model.get_categories()
+    },
+    async addExp(){
+        await model.add_expense(this.$data.amount, this.$data.selectedCategory)
         this.router.replace({ path: '/home' })
     },
     addC(){
@@ -110,6 +119,9 @@ export default defineComponent({
         await toast.present();
       },
   },
+  created(){
+    this.init()
+  },
   components: {
     IonBackButton,
     IonContent,
@@ -117,7 +129,8 @@ export default defineComponent({
     IonHeader,
     IonPage,
     IonTitle,
-    IonToolbar
+    IonToolbar,
+    IonPopover, IonButton, IonChip, IonItem, IonLabel, IonButtons, IonItemDivider,IonIcon
   },
 });
 </script>
