@@ -1,0 +1,175 @@
+<template>
+  <ion-page>
+    <ion-header :translucent="true">
+      <ion-toolbar>
+      <ion-buttons slot="start">
+          <ion-back-button :text="getBackButtonText()" default-href="/"></ion-back-button>
+        </ion-buttons>
+        <ion-title>Settings</ion-title>
+      </ion-toolbar>
+    </ion-header>
+    
+    <ion-content :fullscreen="true">
+      
+      <ion-header collapse="condense">
+        <ion-toolbar>
+          <ion-title size="large">Settings</ion-title>
+        </ion-toolbar>
+      </ion-header>
+      
+
+    <ion-item-divider>
+        <ion-label>
+            Budget
+        </ion-label>
+    </ion-item-divider>
+
+    <ion-item>
+      <ion-label>Your budget</ion-label>
+      <ion-input type="number" v-model="budget" placeholder="0.00 $"></ion-input>
+    </ion-item>
+
+    <ion-list>
+    <ion-radio-group value="monthly" v-model="budget_time">
+      <ion-item>
+        <ion-label>Monthly</ion-label>
+        <ion-radio slot="end" value="monthly"></ion-radio>
+      </ion-item>
+
+      <ion-item>
+        <ion-label>Daily</ion-label>
+        <ion-radio slot="end" value="daily"></ion-radio>
+      </ion-item>
+    </ion-radio-group>
+  </ion-list>
+
+
+
+    <p :visible="isfirst">New budget will be applied to current month.</p>
+    <ion-button :disabled="budget==0" @click="saveBudget">Save</ion-button>
+
+
+    <ion-item-divider>
+        <ion-label>
+            Default currency
+        </ion-label>
+    </ion-item-divider>
+
+    <ion-item>
+      <ion-label>Currency</ion-label>
+      <ion-input type="text" v-model="currency" placeholder=""></ion-input>
+    </ion-item>
+    <ion-button @click="saveBudget">model.set_default_value(currency)</ion-button>
+
+
+    <ion-item-divider>
+        <ion-label>
+            Categories
+        </ion-label>
+    </ion-item-divider>
+
+
+    <ion-chip v-for="(item, index) in categories" 
+    :key="item"
+    :color=colors[index%5]
+    :outline="selectedCategory==item"
+    @click="selectedCategory = item"
+    >
+        {{item}}
+        <ion-icon :icon="closeCircle" @click="deleteC(item)"></ion-icon>
+    </ion-chip>
+
+    <ion-chip @click="isAdding=true" :color=colors[categories.length%5]>
+        Add new
+    </ion-chip>
+
+
+    <ion-popover :is-open="isAdding" :event="event" @didDismiss="isAdding = false">
+        <ion-content class="ion-padding">Add new category</ion-content>
+        <ion-item>
+            <ion-label>Name</ion-label>
+            <ion-input v-model="newCatName" placeholder="category"></ion-input>
+        </ion-item>
+        <ion-button :disabled="newCatName==''" @click="addC()">Add</ion-button>
+        <ion-button @click="isAdding=false">Cancel</ion-button>
+    </ion-popover>
+
+    </ion-content>
+  </ion-page>
+</template>
+
+<script lang="ts">
+import { useRouter } from 'vue-router';
+import { IonRadio, IonRadioGroup, IonContent,IonBackButton, toastController, IonInput , IonHeader, IonPage, IonItem, IonLabel, IonList, IonItemDivider, IonTitle, IonToolbar, IonCard, IonCardContent, IonCardHeader, IonCardSubtitle, IonCardTitle } from '@ionic/vue';
+import { model } from '../data/model'
+import { defineComponent } from 'vue';
+import { closeCircle } from 'ionicons/icons';
+import { getMessages } from '@/data/messages';
+
+export default defineComponent({
+  name: 'HomePage',
+  setup(){
+    const router = useRouter();
+    return { router, closeCircle };
+  },
+  data() {
+    return {
+      currency: model.get_default_value(),
+      isfirst: model.is_first_configuration(),
+      categories: model.get_categories(),
+      colors: ["primary", "secondary", "tertiary", "success", "warning"],
+      isAdding: false,
+      newCatName: "",
+      budget: 0,
+      budget_time: 'monthly',
+      getBackButtonText: () => {
+        const win = window as any;
+        const mode = win && win.Ionic && win.Ionic.mode;
+        return mode === 'ios' ? 'Inbox' : '';
+      }
+    }
+  },
+  methods: {
+    saveBudget(){
+        let x = 0
+        if (this.$data.budget_time == 'daily'){
+            x = 1
+        }
+        model.set_budget(this.$data.budget, x)
+        this.router.replace({ path: '/home' })
+    },
+    deleteC(item:string){
+        model.remove_category(item)
+        this.$data.categories = this.$data.categories.filter(function(value:any){ 
+        return value != item;
+    });
+    },
+    addC(){
+        if (model.add_category(this.$data.newCatName)){
+            this.$data.categories.push(this.$data.newCatName)
+        } else {
+            this.presentToast("Categoria già esistente")
+        }
+        this.$data.isAdding = false
+    },
+    async presentToast(text: string) {
+        const toast = await toastController.create({
+          message: text,
+          duration: 1500,
+          position: 'bottom'
+        });
+        await toast.present();
+      },
+  },
+  components: {
+    IonBackButton,
+    IonContent,
+    IonInput,
+    IonHeader,
+    IonPage,
+    IonTitle,
+    IonToolbar,
+    IonRadio, IonRadioGroup
+  },
+});
+</script>

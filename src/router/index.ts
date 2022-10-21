@@ -13,8 +13,16 @@ const routes: Array<RouteRecordRaw> = [
     component: HomePage
   },
   {
-    path: '/message/:id',
-    component: () => import('../views/ViewMessagePage.vue')
+    path: '/addexpense',
+    component: () => import('../views/AddExpensePage.vue')
+  },
+  {
+    path: '/settings',
+    component: () => import('../views/SettingsPage.vue')
+  },
+  {
+    path: '/past',
+    component: () => import('../views/PastMonths.vue')
   }
 ]
 
