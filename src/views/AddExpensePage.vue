@@ -18,45 +18,68 @@
       </ion-header>
       
 
-    <ion-item>
-      <ion-label>Ampunt</ion-label>
+    <div class="amountdiv">
+    <ion-item style="width:60%">
+      <ion-label position="floating">Amount:</ion-label>
       <ion-input @click="onInputClick($event)" type="number" v-model="amount" placeholder="0.00 $"></ion-input>
     </ion-item>
+    </div>
 
-    <ion-item-divider>
-        <ion-label>
-            Category
-        </ion-label>
-    </ion-item-divider>
+    <div class="dividercontainer">
+       <ion-item-divider class="withtopborder">
+        <p class="weightened">
+        Choose a category
+        </p>
+      </ion-item-divider>
+      </div>
 
 
+<div style="margin-left:20px; margin-right:20px">
+<div class="chipcontainer" style="margin-top:24px">
     <ion-chip v-for="(item, index) in categories" 
     :key="item"
     :color=colors[index%5]
     :outline="selectedCategory==item"
     @click="selectedCategory = item"
+    class="chip"
     >
         {{item}}
     </ion-chip>
-    <ion-chip @click="isAdding=true" :color=colors[categories.length%5]>
+    <ion-chip @click="isAdding=true" :color=colors[categories.length%5] class="chip">
         Add new
         <ion-icon :icon="add"></ion-icon>
     </ion-chip>
+</div>
+</div>
 
 
-    <ion-popover :is-open="isAdding" :event="event" @didDismiss="isAdding = false">
-        <ion-content class="ion-padding">Add new category</ion-content>
-        <ion-item>
-            <ion-label>Name</ion-label>
+<ion-popover :is-open="isAdding" :event="event" @didDismiss="isAdding = false" style="--offset-y: -220px" >
+    <ion-content class="ion-padding"><p class="weightened">Add new category</p></ion-content>
+        <div style="margin-left:14px; margin-bottom:10px">
+          <ion-item style="width:80%">
+            <ion-label position="floating">Name:</ion-label>
             <ion-input v-model="newCatName" placeholder="category"></ion-input>
-        </ion-item>
-        <ion-button :disabled="newCatName==''" @click="addC()">Add</ion-button>
-        <ion-button @click="isAdding=false">Cancel</ion-button>
-    </ion-popover>
-    
+          </ion-item>
+        </div>
 
-    <ion-button :disabled="selectedCategory=='' || amount==0" @click="addExp()">Insert</ion-button>
-      
+    <ion-button :disabled="newCatName==''" @click="addC()" style="padding-left:10px; padding-right:10px">Add</ion-button>
+    <ion-button @click="isAdding=false"  style="padding-left:10px; padding-right:10px; margin-bottom:12px">Cancel</ion-button>
+</ion-popover>
+
+
+
+
+<ion-fab vertical="bottom" horizontal="end" slot="fixed">
+  <ion-fab-button v-show="!(selectedCategory=='' || (amount == undefined || amount==0))" @click="addExp()"
+    style="margin-right:12px; margin-bottom:12px">
+        <ion-icon :icon="checkmarkOutline"></ion-icon>
+  </ion-fab-button>
+    
+</ion-fab>
+
+ 
+ <div style="margin-bottom:100px"></div>
+
     </ion-content>
   </ion-page>
 </template>
@@ -67,12 +90,14 @@ import { IonIcon,IonPopover, IonChip, IonButton, IonButtons, IonContent,IonBackB
 import { model } from '../data/model'
 import { add } from 'ionicons/icons';
 import { defineComponent } from 'vue';
+import {checkmarkOutline}from 'ionicons/icons';
+
 
 export default defineComponent({
   name: 'HomePage',
   setup(){
     const router = useRouter();
-    return { router, add };
+    return { router, add, checkmarkOutline };
   },
   data() {
     return {
@@ -81,7 +106,7 @@ export default defineComponent({
       selectedCategory: "",
       isAdding: false,
       newCatName: "",
-      amount: 0,
+      amount: undefined,
       getBackButtonText: () => {
         const win = window as any;
         const mode = win && win.Ionic && win.Ionic.mode;
@@ -104,9 +129,9 @@ export default defineComponent({
     },
     addC(){
         if (model.add_category(this.$data.newCatName)){
-            this.$data.categories.push(this.$data.newCatName)
+            this.$data.categories = model.get_categories()
         } else {
-            this.presentToast("Categoria già esistente")
+            this.presentToast("Category already exists")
         }
         this.$data.isAdding = false
     },

@@ -2,6 +2,85 @@
 http://ionicframework.com/docs/theming/ */
 
 /** Ionic CSS Variables **/
+ion-card.withborder {
+  margin-left: 20px;
+  margin-right: 20px;
+  margin-top: 20px;
+
+}
+hr {
+  border: 0;
+  clear:both;
+  display:block;
+  width: 90%;               
+  background-color:#3c3c3c;
+  height: 0.2px;
+}
+.dividercontainer{
+  width: 100%;
+  padding-left: 15px;
+  padding-right:15px;
+}
+ion-item-divider.withtopborder{
+  margin-top: 26px;
+  padding: 0;
+  --color: var(--ion-color-dark);
+  height: 45px;
+}
+p.weightened{
+  width: 100%;
+  color: var(--ion-color-dark);
+  font-weight: 500;
+  font-size: 15px;
+  text-align: center;
+}
+div.partoflist{
+  margin-left: 15px;
+  margin-right: 45px;
+  margin-top: 14px; margin-bottom: 9px;
+  display:flex; flex-direction: row; align-items: center; justify-content: space-between;
+}
+div.partoflistsmall{
+  width: 70%;
+  margin-right: 10px;
+  display:flex; flex-direction: row; align-items: center; justify-content:space-between;
+}
+div.partoflistsmall2{
+  width: 18%;
+  margin-left: 10px;
+  display:flex; flex-direction: row; align-items: center; justify-content:space-between;
+}
+div.partoflistbig{
+  margin-left: 15px;
+  margin-right: 45px;
+  margin-top: 14px; margin-bottom: 9px;
+  display:flex; flex-direction: row; align-items: center; justify-content: space-between;
+}
+div.amountdiv{
+  margin-top: 36px; margin-bottom: 32px;
+  width: 100%;
+  display:flex; flex-direction: row; align-items: center; justify-content: center;
+}
+div.chipcontainer{
+  display: flex; justify-content:center;
+  flex-wrap: wrap;justify-content: center;
+}
+.chip{
+  font-size: 14px;
+}
+p.list_int{
+  font-weight: 650;
+  margin-left: 10px;
+}
+.middle{
+  width: 100%;
+  height:100px;
+  font-weight: 600;
+  font-size: 18px;
+  color: gray;
+  display:flex; flex-direction: row; align-items: center; justify-content: center;
+}
+
 :root {
   /** primary **/
   --ion-color-primary: #3880FF;
@@ -195,7 +274,7 @@ http://ionicframework.com/docs/theming/ */
    * Material Design Dark Theme
    * -------------------------------------------
    */
-
+/*
   .md body {
     --ion-background-color: #121212;
     --ion-background-color-rgb: 18,18,18;
@@ -232,5 +311,5 @@ http://ionicframework.com/docs/theming/ */
     --ion-tab-bar-background: #1f1f1f;
 
     --ion-card-background: #1e1e1e;
-  }
+  }*/
 }

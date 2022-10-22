@@ -141,19 +141,21 @@ export const model: any = {
             this.settings = {
                 currency: "€",
                 language: "en",
-                categories: ['A', 'B', 'Ciao', 'Rerere', 'sdfsdf'],
+                categories: [
+                    "Rent 🏠", "Grocery 🍴", "Eating out 🌮", "Drinks 🍸", "Hobbies 🥏", "Travel 🚞", 
+                    "Clothes 👖", "Car expenses 🚗", "Bills 📄", "Subscriptions 🖥", "Other expenses 📁"
+                ],
                 date: new Date(Date.now()),
                 budget: {
                     type: 0,
                     budget: 0
                 }
             }
-            console.log("created")
             await this.storage.set('settings', this.settings)
-            await this.test()
+            //await this.test()
             return false
         } else {
-            this.settings.date =new Date(2022, 9, 2) //new Date(Date.now())
+            this.settings.date = new Date(Date.now())
             return true
         }
         
@@ -180,10 +182,13 @@ export const model: any = {
     },
 
     add_category: function(category: string): boolean{
+        console.log(this.settings.categories)
         if (this.settings.categories.includes(category)){
             return false
         }
         this.settings.categories.push(category)
+        console.log(this.settings.categories)
+        console.log("Added")
         this.storage.set('settings', this.settings)
         return true
     },
@@ -280,7 +285,7 @@ export const model: any = {
         }
         const m = await this.load_current_month()
         let weekSpending = 0
-        const targetDate = new Date(2022, 9, 2) //new Date(Date.now())
+        const targetDate = new Date(Date.now())
         let dayOfWeek = targetDate.getDay()-1;
         if (dayOfWeek == -1){
             dayOfWeek = 6

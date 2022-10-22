@@ -18,17 +18,25 @@
       </ion-header>
       
 
-    <ion-item-divider>
-        <ion-label>
-            Budget
-        </ion-label>
-    </ion-item-divider>
+<div class="dividercontainer">
+       <ion-item-divider class="withtopborder">
+        <p class="weightened">
+        Choose your budget
+        </p>
+      </ion-item-divider>
+ </div>
 
-    <ion-item>
-      <ion-label>Your budget</ion-label>
+    <div class="amountdiv">
+    <ion-item style="width:60%">
+      <ion-label position="floating">Your budget:</ion-label>
       <ion-input @click="onInputClick($event)" type="number" v-model="budget.budget" placeholder="0.00 $"></ion-input>
     </ion-item>
+    </div>
 
+<p class="weightened" style="font-weight:350; margin-top:54px">
+  Budget period:
+</p>
+<div class="dividercontainer">
     <ion-list>
     <ion-radio-group value="monthly" v-model="budget_time">
       <ion-item>
@@ -42,55 +50,78 @@
       </ion-item>
     </ion-radio-group>
   </ion-list>
+</div>
 
 
+<p :visible="isfirst" class="weightened" style="font-weight:350;">
+  New budget will be applied to current month.
+</p>
+<div class="middle" style="height:45px">
+<ion-button :disabled="budget==0"  @click="saveBudget" style="width:200px">Save budget</ion-button>
+</div>
 
-    <p :visible="isfirst">New budget will be applied to current month.</p>
-    <ion-button :disabled="budget==0"  @click="saveBudget">Save</ion-button>
+<div class="dividercontainer">
+       <ion-item-divider class="withtopborder">
+        <p class="weightened">
+        Default currency
+        </p>
+      </ion-item-divider>
+ </div>
 
 
-    <ion-item-divider>
-        <ion-label>
-            Default currency
-        </ion-label>
-    </ion-item-divider>
-
-    <ion-item>
-      <ion-label>Currency</ion-label>
+<div class="amountdiv" style="margin-top:14px; margin-bottom:24px">
+    <ion-item style="width:60%">
+      <ion-label position="floating">Currency:</ion-label>
       <ion-input type="text" v-model="currency" placeholder=""></ion-input>
     </ion-item>
-    <ion-button @click="updateCurrency">Update default currency</ion-button>
+</div>
+
+<div class="middle" style="height:45px">
+<ion-button @click="updateCurrency">Update default currency</ion-button>
+</div>
 
 
-    <ion-item-divider>
-        <ion-label>
-            Categories
-        </ion-label>
-    </ion-item-divider>
+
+<div class="dividercontainer">
+       <ion-item-divider class="withtopborder">
+        <p class="weightened">
+        Categories
+        </p>
+      </ion-item-divider>
+ </div>
 
 
+<div style="margin-left:20px; margin-right:20px">
+<div class="chipcontainer" style="margin-top:24px">
     <ion-chip v-for="(item, index) in categories" 
     :key="item"
     :color=colors[index%5]
     >
-        {{item}}
+        <p style="max-width:90%">{{item}}</p>
         <ion-icon :icon="closeCircle" @click="deleteC(item)"></ion-icon>
     </ion-chip>
 
     <ion-chip @click="isAdding=true" :color=colors[categories.length%5]>
         Add new
     </ion-chip>
+</div>
+</div>
+
+ <div style="margin-bottom:100px"></div>
 
 
-    <ion-popover :is-open="isAdding" :event="event" @didDismiss="isAdding = false">
-        <ion-content class="ion-padding">Add new category</ion-content>
-        <ion-item>
-            <ion-label>Name</ion-label>
+<ion-popover :is-open="isAdding" :event="event" @didDismiss="isAdding = false" style="--offset-y: -220px" >
+    <ion-content class="ion-padding"><p class="weightened">Add new category</p></ion-content>
+        <div style="margin-left:14px; margin-bottom:10px">
+          <ion-item style="width:80%">
+            <ion-label position="floating">Name:</ion-label>
             <ion-input v-model="newCatName" placeholder="category"></ion-input>
-        </ion-item>
-        <ion-button :disabled="newCatName==''" @click="addC()">Add</ion-button>
-        <ion-button @click="isAdding=false">Cancel</ion-button>
-    </ion-popover>
+          </ion-item>
+        </div>
+
+    <ion-button :disabled="newCatName==''" @click="addC()" style="padding-left:10px; padding-right:10px">Add</ion-button>
+    <ion-button @click="isAdding=false"  style="padding-left:10px; padding-right:10px; margin-bottom:12px">Cancel</ion-button>
+</ion-popover>
 
     </ion-content>
   </ion-page>
@@ -129,6 +160,7 @@ export default defineComponent({
   methods: {
     updateCurrency(){
       model.set_default_value(this.$data.currency)
+      this.presentToast("Currency updated")
     },
     onInputClick(nativeEl:any){
       nativeEl.target.autofocus=true;
@@ -159,9 +191,9 @@ export default defineComponent({
     },
     addC(){
         if (model.add_category(this.$data.newCatName)){
-            this.$data.categories.push(this.$data.newCatName)
+            this.$data.categories = model.get_categories()
         } else {
-            this.presentToast("Categoria già esistente")
+            this.presentToast("Category already exists")
         }
         this.$data.isAdding = false
     },
