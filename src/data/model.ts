@@ -114,19 +114,6 @@ export const model: any = {
         await this.storage.set(key, month)
     },
 
-    async test(){
-        const o = await this.load_month(8, 2022)
-        o.tot_spending = 1000
-        o.daily_budget = 30
-        o.spending.push(
-            {
-                cost: 30,
-                date: new Date(2022, 8, 29),
-                category: "A"
-            }
-        ) 
-        await this.save_month(o)
-    },
 
     //Returns false if it is first time
     async init(): Promise<boolean>{
@@ -135,7 +122,6 @@ export const model: any = {
         }
         this.isInit = true
         await this.storage.create();
-        //await this.storage.clear()
         this.settings = await this.storage.get('settings');
         if (this.settings == undefined){
             this.settings = {
@@ -152,7 +138,6 @@ export const model: any = {
                 }
             }
             await this.storage.set('settings', this.settings)
-            //await this.test()
             return false
         } else {
             this.settings.date = new Date(Date.now())
@@ -217,7 +202,6 @@ export const model: any = {
                 break;
             }
 
-        
             const budget = m.daily_budget * getDaysInMonth(date.getMonth(), date.getFullYear())
             r.push({
                 total_sum: m.tot_spending,
@@ -309,8 +293,8 @@ export const model: any = {
         const exp: Expense = {
             total_sum: weekSpending,
             max_budget: m.daily_budget * 7,
-            remains: round_n((m.daily_budget*(this.settings.date.getDay()+1)) - weekSpending),
-            budget_as_today: m.daily_budget*(this.settings.date.getDay()+1)
+            remains: round_n((m.daily_budget*(dayOfWeek+1)) - weekSpending),
+            budget_as_today: round_n(m.daily_budget*(dayOfWeek+1))
         }
         this.weekly_exp = exp
         return exp 

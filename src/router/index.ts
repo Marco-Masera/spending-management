@@ -17,7 +17,7 @@ const routes: Array<RouteRecordRaw> = [
     component: () => import('../views/AddExpensePage.vue')
   },
   {
-    path: '/settings',
+    path: '/settings/:firsttime',
     component: () => import('../views/SettingsPage.vue')
   },
   {

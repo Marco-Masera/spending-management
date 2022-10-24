@@ -53,7 +53,7 @@
 </div>
 
 
-<p :visible="isfirst" class="weightened" style="font-weight:350;">
+<p v-if="!isfirst" class="weightened" style="font-weight:350;">
   New budget will be applied to current month.
 </p>
 <div class="middle" style="height:45px">
@@ -107,6 +107,7 @@
 </div>
 </div>
 
+
  <div style="margin-bottom:100px"></div>
 
 
@@ -143,7 +144,7 @@ export default defineComponent({
   data() {
     return {
       currency: "",
-      isfirst: true,
+      isfirst: false,
       categories: [''],
       colors: ["primary", "secondary", "tertiary", "success", "warning"],
       isAdding: false,
@@ -167,12 +168,16 @@ export default defineComponent({
       nativeEl.target.select();
     },
     async init(){
-      this.$data.isfirst = !(await model.init())
+      await model.init()
       this.$data.currency = model.get_default_value()
       this.$data.categories = model.get_categories()
       this.$data.budget = model.get_budget()
       if (this.$data.budget.type != 0){
         this.$data.budget_time = "daily"
+      }
+      if (this.$route.params.firsttime == "true"){
+        console.log("t")
+          this.$data.isfirst = true
       }
     },
     async saveBudget(){

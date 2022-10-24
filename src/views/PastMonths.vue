@@ -26,7 +26,7 @@
         <ion-card-content v-if="month.remains >= 0" style="color:green;">
           {{month.remains}} {{currency}} saved!
         </ion-card-content>
-        <ion-card-content v-if="month.remains < 0" style="color:red;">
+        <ion-card-content v-if="month.remains < 0" style="color:var(--ion-color-danger);">
           {{-month.remains}} {{currency}} overspent
         </ion-card-content>
       </ion-card>

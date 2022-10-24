@@ -4,8 +4,8 @@
       <ion-toolbar>
         <ion-title>Your expenses</ion-title>
             <ion-buttons slot="end">
-          <ion-button href="/settings">
-            Settings
+          <ion-button href="/settings/false">
+            <p style="font-weight:550">Settings</p>
           </ion-button>
         </ion-buttons>
       </ion-toolbar>
@@ -29,7 +29,7 @@
         <ion-card-content v-if="monthly_exp.remains>=0" style="color:green;">
         You are saving {{monthly_exp.remains}} {{currency}} this month so far!
         </ion-card-content>
-        <ion-card-content v-if="monthly_exp.remains<0" style="color:red;">
+        <ion-card-content v-if="monthly_exp.remains<0" style="color:var(--ion-color-danger);">
         You are {{-monthly_exp.remains}} {{currency}} over your daily budget so far
         </ion-card-content>
       </ion-card>
@@ -43,7 +43,7 @@
         <ion-card-content v-if="weekly_exp.remains>=0" style="color:green;">
         You are saving {{weekly_exp.remains}} {{currency}} this week so far!
         </ion-card-content>
-        <ion-card-content v-if="weekly_exp.remains<0" style="color:red;">
+        <ion-card-content v-if="weekly_exp.remains<0" style="color:var(--ion-color-danger);">
         You are {{-weekly_exp.remains}} {{currency}} over your daily budget so far
         </ion-card-content>
       </ion-card>
@@ -89,7 +89,7 @@
         <ion-label style="max-width:45%">{{item.category}}</ion-label>
         </div>
         <div class = "partoflistsmall2">
-        <ion-label style="min-width:30px; margin-right:8px;">{{item.cost}} {{currency}}</ion-label>
+        <ion-label style="min-width:45px; margin-right:8px;">{{item.cost}} {{currency}}</ion-label>
           <ion-button @click="deleteExpense(item)" fill="clear">
           <ion-icon :icon="closeCircleOutline">
           </ion-icon></ion-button>
@@ -106,18 +106,15 @@
 </div>
 
       <ion-fab vertical="bottom" horizontal="end" slot="fixed">
-      <ion-row>
-        <ion-col>
-          <ion-fab-button href="/past">
+  <div style = "display:flex;">
+          <ion-fab-button href="/past" style="margin-right:8px">
         <ion-icon :icon="calendarClearOutline"></ion-icon>
       </ion-fab-button>
-        </ion-col>
-        <ion-col>
+
           <ion-fab-button href="/addexpense" side="left">
         <ion-icon :icon="add"></ion-icon>
       </ion-fab-button>
-        </ion-col>
-      </ion-row>
+</div>
     </ion-fab>
 
 
@@ -128,6 +125,7 @@
 </template>
 
 <script lang="ts">
+import { useRouter } from 'vue-router';
 import { IonIcon,IonButtons,IonButton, IonContent,IonFab,IonFabButton, IonHeader, IonPage, IonLabel, IonItemDivider, IonTitle, IonToolbar, IonCard, IonCardContent, IonCardHeader, IonCardSubtitle, IonCardTitle } from '@ionic/vue';
 import { model } from '../data/model'
 import { defineComponent } from 'vue';
@@ -153,7 +151,10 @@ export default defineComponent({
       this.$data.exp_by_cat = await model.get_expenses_by_category()
     },
     async init(){
-      await model.init()
+      const isInit = await model.init()
+      if (!isInit){
+        this.router.replace({ path: '/settings/true' })
+      }
       this.$data.currency = model.get_default_value()
       model.get_monthly_expense().then((result:any) => this.$data.monthly_exp = result)
       model.get_weekly_expense().then((result:any) => this.$data.weekly_exp = result)
@@ -178,7 +179,8 @@ export default defineComponent({
 
   },
   setup() {
-    return {add, closeCircleOutline,calendarClearOutline}
+    const router = useRouter();
+    return {add, closeCircleOutline,calendarClearOutline,router}
   }
 });
 </script>
