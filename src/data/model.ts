@@ -204,7 +204,7 @@ export const model: any = {
 
             const budget = m.daily_budget * getDaysInMonth(date.getMonth(), date.getFullYear())
             r.push({
-                total_sum: m.tot_spending,
+                total_sum: round_n(m.tot_spending),
                 remains: round_n(budget - m.tot_spending),
                 date: getFormattedDate(date, this.settings.language)
             })
@@ -254,8 +254,8 @@ export const model: any = {
         }
         const m = await this.load_current_month()
         const exp: Expense = {
-            total_sum: m.tot_spending,
-            max_budget: m.daily_budget * getDaysInMonth(m.month, m.year),
+            total_sum: round_n(m.tot_spending),
+            max_budget: round_n(m.daily_budget * getDaysInMonth(m.month, m.year)),
             remains: round_n((m.daily_budget*this.settings.date.getDate()) - m.tot_spending),
             budget_as_today: (m.daily_budget*this.settings.date.getDate())
         }
@@ -269,13 +269,13 @@ export const model: any = {
         }
         const m = await this.load_current_month()
         let weekSpending = 0
-        const targetDate = new Date(Date.now())
-        let dayOfWeek = targetDate.getDay()-1;
+        const today = new Date(Date.now())
+        let dayOfWeek = (today).getDay()-1;
         if (dayOfWeek == -1){
             dayOfWeek = 6
         }
-
-        targetDate.setDate(targetDate.getDate() - dayOfWeek);
+        const targetDate = new Date(today.getFullYear(),today.getMonth, today.getDate()-dayOfWeek)
+    
 
         m.spending.forEach((s: SingleExpense) => {
             if (s.date.getTime() >= targetDate.getTime()){
@@ -291,8 +291,8 @@ export const model: any = {
             })
         }
         const exp: Expense = {
-            total_sum: weekSpending,
-            max_budget: m.daily_budget * 7,
+            total_sum: round_n(weekSpending),
+            max_budget: round_n(m.daily_budget * 7),
             remains: round_n((m.daily_budget*(dayOfWeek+1)) - weekSpending),
             budget_as_today: round_n(m.daily_budget*(dayOfWeek+1))
         }
