@@ -274,7 +274,7 @@ export const model: any = {
         if (dayOfWeek == -1){
             dayOfWeek = 6
         }
-        const targetDate = new Date(today.getFullYear(),today.getMonth, today.getDate()-dayOfWeek)
+        const targetDate = new Date(today.getFullYear(),today.getMonth(), today.getDate()-dayOfWeek)
     
 
         m.spending.forEach((s: SingleExpense) => {
