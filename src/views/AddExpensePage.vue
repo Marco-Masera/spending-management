@@ -21,7 +21,7 @@
     <div class="amountdiv">
     <ion-item style="width:60%">
       <ion-label position="floating">Amount:</ion-label>
-      <ion-input @click="onInputClick($event)" type="number" v-model="amount" placeholder="0.00 $"></ion-input>
+      <ion-input @click="onInputClick($event)" type="number" v-model="amount" placeholder="0.00"></ion-input>
     </ion-item>
     </div>
 

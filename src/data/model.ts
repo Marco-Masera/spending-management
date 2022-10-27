@@ -6,10 +6,10 @@ export interface Budget{
 }
 
 export interface Expense{
-    total_sum: number,
-    max_budget: number,
-    remains: number,
-    budget_as_today: number
+    total_sum: string,
+    max_budget: string,
+    remains: string,
+    budget_as_today: string
 }
 
 export interface SingleExpense{
@@ -23,7 +23,7 @@ export interface HomePageLocalizer{
 }
 
 export interface ExpenseWithDate{
-    total_sum: number,
+    total_sum: string,
     remains: number,
     date: string
 }
@@ -183,7 +183,7 @@ export const model: any = {
         this.storage.set('settings', this.settings)
     },
 
-    //Dollars or euros or whathever
+    //Dollars or euros or whatever
     get_default_value():string{
         return this.settings.currency
     },
@@ -204,8 +204,8 @@ export const model: any = {
 
             const budget = m.daily_budget * getDaysInMonth(date.getMonth(), date.getFullYear())
             r.push({
-                total_sum: round_n(m.tot_spending),
-                remains: round_n(budget - m.tot_spending),
+                total_sum: (m.tot_spending).toFixed(2),
+                remains: (budget - m.tot_spending),
                 date: getFormattedDate(date, this.settings.language)
             })
             date.setMonth(date.getMonth() - 1);
@@ -226,7 +226,7 @@ export const model: any = {
         console.log(d)
         const a:any = []
         for (const property in d) {
-            a.push([property, d[property]])
+            a.push([property, d[property].toFixed(2)])
         }
         a.sort((a: any, b: any) =>b[1]-a[1] )
         return a
@@ -234,16 +234,16 @@ export const model: any = {
 
     async get_all_month_expenses(): Promise<SingleExpense[]>{
         const m = await this.load_current_month()
-        m.spending.forEach((s:any)=>{s.cost = Number(s.cost)})
+        m.spending.forEach((s:any)=>{s.cost = round_n(Number(s.cost)).toFixed(2)})
         return m.spending
     },
 
     get_empty_expense: function(): Expense {
         const exp: Expense = {
-            total_sum: 0,
-            max_budget: 0,
-            remains: 0,
-            budget_as_today: 0
+            total_sum: "0.00",
+            max_budget: "0.00",
+            remains: "0.00",
+            budget_as_today: "0.00"
         }
         return exp 
     },
@@ -254,10 +254,10 @@ export const model: any = {
         }
         const m = await this.load_current_month()
         const exp: Expense = {
-            total_sum: round_n(m.tot_spending),
-            max_budget: round_n(m.daily_budget * getDaysInMonth(m.month, m.year)),
-            remains: round_n((m.daily_budget*this.settings.date.getDate()) - m.tot_spending),
-            budget_as_today: (m.daily_budget*this.settings.date.getDate())
+            total_sum: (m.tot_spending).toFixed(2),
+            max_budget: (m.daily_budget * getDaysInMonth(m.month, m.year)).toFixed(2),
+            remains: ((m.daily_budget*this.settings.date.getDate()) - m.tot_spending).toFixed(2),
+            budget_as_today: (m.daily_budget*this.settings.date.getDate()).toFixed(2)
         }
         this.monthly_exp = exp
         return exp 
@@ -291,10 +291,10 @@ export const model: any = {
             })
         }
         const exp: Expense = {
-            total_sum: round_n(weekSpending),
-            max_budget: round_n(m.daily_budget * 7),
-            remains: round_n((m.daily_budget*(dayOfWeek+1)) - weekSpending),
-            budget_as_today: round_n(m.daily_budget*(dayOfWeek+1))
+            total_sum: (weekSpending).toFixed(2),
+            max_budget: (m.daily_budget * 7).toFixed(2),
+            remains: ((m.daily_budget*(dayOfWeek+1)) - weekSpending).toFixed(2),
+            budget_as_today: (m.daily_budget*(dayOfWeek+1)).toFixed(2)
         }
         this.weekly_exp = exp
         return exp 
@@ -327,7 +327,7 @@ export const model: any = {
         const m = await this.load_current_month()
         m.tot_spending -= Number(expense.cost)
         for (let i=0; i<m.spending.length; i++){
-            if (m.spending[i].cost == expense.cost && m.spending[i].date.getTime() == expense.date.getTime() && m.spending[i].category==expense.category){
+            if (round_n(m.spending[i].cost) ==  round_n(expense.cost) && m.spending[i].date.getTime() == expense.date.getTime() && m.spending[i].category==expense.category){
                 m.spending.splice(i, 1)
                 break
             }

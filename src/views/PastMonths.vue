@@ -24,10 +24,10 @@
         </ion-card-header>
 
         <ion-card-content v-if="month.remains >= 0" style="color:green;">
-          {{month.remains}} {{currency}} saved!
+          {{month.remains.toFixed(2)}} {{currency}} saved!
         </ion-card-content>
         <ion-card-content v-if="month.remains < 0" style="color:var(--ion-color-danger);">
-          {{-month.remains}} {{currency}} overspent
+          {{(-month.remains).toFixed(2)}} {{currency}} overspent
         </ion-card-content>
       </ion-card>
 

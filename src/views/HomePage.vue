@@ -1,4 +1,4 @@
-<template>
+<template class="dark">
   <ion-page>
     <ion-header :translucent="true">
       <ion-toolbar>
@@ -59,9 +59,9 @@
         </p>
       </ion-item-divider>
       </div>
-      <ion-card class="withborder">
-      
 
+
+      <ion-card class="withborder">
       <div  v-for="(item, index) in exp_by_cat" :key="item">
       <div class = "partoflist">
         <ion-label style="max-width:80%"><p class="list_int">{{item[0]}}</p></ion-label>
@@ -79,19 +79,18 @@
       </ion-item-divider>
       </div>
 
+
       <ion-card class="withborder">
-
-
       <div  v-for="(item, index) in all_exp" :key="item">
       <div class = "partoflistbig">
       <div class = "partoflistsmall">
         <ion-label><p class="list_int">{{item.date.getDate()}}/{{item.date.getMonth()+1}}/{{item.date.getFullYear()}}</p></ion-label>
-        <ion-label style="max-width:45%">{{item.category}}</ion-label>
+        <ion-label style="max-width:45%; text-align: center;">{{item.category}}</ion-label>
         </div>
         <div class = "partoflistsmall2">
-        <ion-label style="min-width:45px; margin-right:8px;">{{item.cost}} {{currency}}</ion-label>
+        <ion-label style="min-width:55px; margin-right:0px;text-align: right;">{{item.cost}} {{currency}}</ion-label>
           <ion-button @click="deleteExpense(item)" fill="clear">
-          <ion-icon :icon="closeCircleOutline">
+          <ion-icon :icon="closeCircleOutline" >
           </ion-icon></ion-button>
         </div>
       </div>
