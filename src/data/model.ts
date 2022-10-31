@@ -1,4 +1,5 @@
 import { Storage } from '@ionic/storage';
+const currentVersion = 5;
 
 export interface Budget{
     type: number,
@@ -33,7 +34,8 @@ interface GeneralSettings{
     language: string,
     categories: string[],
     date: Date,
-    budget: Budget
+    budget: Budget,
+    lastUpdate: number
 }
 
 interface MonthStorage{
@@ -135,12 +137,20 @@ export const model: any = {
                 budget: {
                     type: 0,
                     budget: 0
-                }
+                },
+                lastUpdate: currentVersion
             }
             await this.storage.set('settings', this.settings)
             return false
         } else {
             this.settings.date = new Date(Date.now())
+            if (this.settings.lastUpdate == undefined){
+                this.settings.lastUpdate = currentVersion
+                this.storage.set('settings', this.settings)
+                const m: MonthStorage = await this.load_current_month()
+                m.daily_budget = get_daily_budget(this.settings.budget, m.month, m.year)
+                await this.save_month(m)
+            }
             return true
         }
         
