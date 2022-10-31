@@ -49,7 +49,7 @@ function round_n(n_: number){
 }
 
 function getDaysInMonth( month: number, year: number) {
-    return new Date(year, month, 0).getDate();
+    return new Date(year, month+1, 0).getDate();
 }
 
 function get_daily_budget(budget:Budget, month: number, year: number):number{
@@ -197,6 +197,7 @@ export const model: any = {
         const date = new Date(Date.now())
         const r: ExpenseWithDate[] = []
         for (let i=0; i<n_months; i++){
+            console.log(date)
             const m = await this.load_month(date.getMonth(), date.getFullYear(), true)
             if (m == undefined){
                 break;
@@ -208,6 +209,7 @@ export const model: any = {
                 remains: (budget - m.tot_spending),
                 date: getFormattedDate(date, this.settings.language)
             })
+            date.setDate(14)
             date.setMonth(date.getMonth() - 1);
         }
         return r
