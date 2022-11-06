@@ -23,6 +23,10 @@ const routes: Array<RouteRecordRaw> = [
   {
     path: '/past',
     component: () => import('../views/PastMonths.vue')
+  },
+  {
+    path: '/pastmonth/:month/:year',
+    component: () => import('../views/HomePage.vue')
   }
 ]
 

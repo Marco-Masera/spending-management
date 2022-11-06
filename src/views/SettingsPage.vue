@@ -90,7 +90,6 @@
       </ion-item-divider>
  </div>
 
-
 <div style="margin-left:20px; margin-right:20px">
 <div class="chipcontainer" style="margin-top:24px">
     <ion-chip v-for="(item, index) in categories" 
@@ -107,6 +106,17 @@
 </div>
 </div>
 
+<div class="dividercontainer">
+       <ion-item-divider class="withtopborder">
+        <p class="weightened">
+        Your data
+        </p>
+      </ion-item-divider>
+ </div>
+ <div class="middle" style = "margin-top: 24px;">
+  <ion-button @click="export_data()" style="padding-left:10px; padding-right:10px">Export data</ion-button>
+  <ion-button @click="import_data()" style="padding-left:10px; padding-right:10px">Import data</ion-button>
+</div>
 
  <div style="margin-bottom:100px"></div>
 
@@ -130,7 +140,7 @@
 
 <script lang="ts">
 import { useRouter } from 'vue-router';
-import { IonIcon, IonChip, IonButtons, IonButton, IonPopover, IonRadio, IonRadioGroup, IonContent,IonBackButton, toastController, IonInput , IonHeader, IonPage, IonItem, IonLabel, IonList, IonItemDivider, IonTitle, IonToolbar } from '@ionic/vue';
+import { alertController , IonIcon, IonChip, IonButtons, IonButton, IonPopover, IonRadio, IonRadioGroup, IonContent,IonBackButton, toastController, IonInput , IonHeader, IonPage, IonItem, IonLabel, IonList, IonItemDivider, IonTitle, IonToolbar } from '@ionic/vue';
 import { model } from '../data/model'
 import { defineComponent } from 'vue';
 import { closeCircle } from 'ionicons/icons';
@@ -159,6 +169,42 @@ export default defineComponent({
     }
   },
   methods: {
+    export_data(){
+      model.export_data().then( (result: boolean) =>{
+          if (result){this.presentToast("Data exported correctly")} else {this.presentToast("Could not export data")}
+      })
+    },
+    async import_data(){
+      const alert = await alertController.create({
+          header: 'Warning: imported data will overwrite local app data. Continue?',
+          buttons: [
+            {
+              text: 'Cancel',
+              role: 'cancel',
+              handler: () => {
+                console.log(".")
+              },
+            },
+            {
+              text: 'Continue',
+              role: 'confirm',
+              handler: () => {
+                model.import_data().then( (result: boolean) =>{
+                  if (result){this.presentToast("Data imported correctly", 5000)} else {this.presentToast("Could not import data", 5000)}
+                }).catch((e:any) => {
+                  this.presentToast("Could not import data :(", 5000)
+                })
+              },
+            },
+          ],
+        });
+
+        await alert.present();
+
+        await alert.onDidDismiss();
+      
+
+    },
     updateCurrency(){
       model.set_default_value(this.$data.currency)
       this.presentToast("Currency updated")
@@ -202,10 +248,10 @@ export default defineComponent({
         }
         this.$data.isAdding = false
     },
-    async presentToast(text: string) {
+    async presentToast(text: string, duration = 1500) {
         const toast = await toastController.create({
           message: text,
-          duration: 1500,
+          duration: duration,
           position: 'bottom'
         });
         await toast.present();

@@ -1,4 +1,9 @@
 import { Storage } from '@ionic/storage';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+import { Plugins } from "@capacitor/core";
+import { objectToString } from '@vue/shared';
+const { FileSelector } = Plugins;
 const currentVersion = 5;
 
 export interface Budget{
@@ -26,7 +31,9 @@ export interface HomePageLocalizer{
 export interface ExpenseWithDate{
     total_sum: string,
     remains: number,
-    date: string
+    date: string,
+    month: number,
+    year: number
 }
 
 interface GeneralSettings{
@@ -156,6 +163,74 @@ export const model: any = {
         
     },
 
+    async import_data(){
+        const multiple_selection = false 
+        const ext = [".json"] 
+        const formData = new FormData(); 
+        const selectedFile = await FileSelector.fileSelector({ 
+                multiple_selection: multiple_selection, 
+                ext: ext 
+            }) 
+        
+        const paths = JSON.parse(selectedFile.paths) 
+        const blob = await fetch(paths[0]).then((r) => r.blob());
+        const text = await blob.text()
+        const obj = JSON.parse(text)
+        //Check correctness of data:
+        if (!obj || !obj.settings || !(obj.settings.language) ||
+        !(obj.settings.categories) || !(obj.settings.budget) || !(obj.settings.budget.type) || !(obj.settings.budget.budget)){
+            return false
+        }
+        //Ok
+        this.settings = obj.settings;
+        this.settings.date = new Date(Date.now())
+        this.settings.lastUpdate = currentVersion
+        await this.storage.clear()
+        await this.storage.set("settings", obj.settings)
+        for (const [key, value] of Object.entries(obj)) {
+            if (key != "settings"){
+                if (obj[key].spending){
+                    obj[key].spending.forEach((s:any) => {
+                        if (s.date){
+                            s.date = new Date(s.date)
+                        }
+                    })
+                }
+                await this.storage.set(key, value)
+            }
+            
+        }
+        this.currentMonth = undefined;
+        this.weekly_exp = undefined;
+        this.monthly_exp = undefined;
+        return true;
+    },
+
+    async export_data(){
+        const allData: any  = {}
+        await this.storage.forEach((value:any, key:string, _: any) => {
+              allData[key] = value
+        })
+
+        const toExport = JSON.stringify(allData)
+        console.log(toExport)
+        const uri = await Filesystem.writeFile({
+            path: 'exported.json',
+            data: toExport,
+            directory: Directory.Cache,
+            encoding: Encoding.UTF8,
+          });
+        if (!uri || !uri.uri){
+            return false 
+        }
+        await Share.share({
+            title: 'spending_manager_export.json',
+            url: uri.uri,
+            dialogTitle: 'Save exported file',
+          });
+        return true
+    },
+
 
     //Settings
     set_budget: async function(type: number, budget: number){
@@ -217,7 +292,9 @@ export const model: any = {
             r.push({
                 total_sum: (m.tot_spending).toFixed(2),
                 remains: (budget - m.tot_spending),
-                date: getFormattedDate(date, this.settings.language)
+                date: getFormattedDate(date, this.settings.language),
+                month: date.getMonth(),
+                year: date.getFullYear()
             })
             date.setDate(14)
             date.setMonth(date.getMonth() - 1);
@@ -225,8 +302,13 @@ export const model: any = {
         return r
     },
 
-    async get_expenses_by_category(): Promise<any[]>{
-        const m = await this.load_current_month()
+    async get_expenses_by_category(_month = "", _year = ""): Promise<any[]>{
+        let m: any;
+        if (_month=="" || _year==""){
+            m = await this.load_current_month()
+        } else {
+            m = await this.load_month(_month, _year)
+        }
         const d:any = {}
         m.spending.forEach((element:SingleExpense) => {
             if (d[element.category]){
@@ -235,7 +317,6 @@ export const model: any = {
                 d[element.category] = Number(element.cost)
             }
         });
-        console.log(d)
         const a:any = []
         for (const property in d) {
             a.push([property, d[property].toFixed(2)])
@@ -244,8 +325,13 @@ export const model: any = {
         return a
     },
 
-    async get_all_month_expenses(): Promise<SingleExpense[]>{
-        const m = await this.load_current_month()
+    async get_all_month_expenses(_month = "", _year = ""): Promise<SingleExpense[]>{
+        let m: any
+        if (_month == "" || _year == ""){
+            m = await this.load_current_month()
+        } else {
+            m = await this.load_month(_month, _year)
+        }
         m.spending.forEach((s:any)=>{s.cost = round_n(Number(s.cost)).toFixed(2)})
         return m.spending
     },
@@ -260,19 +346,31 @@ export const model: any = {
         return exp 
     },
 
-    get_monthly_expense: async function(): Promise<Expense> {
-        if (this.monthly_exp != undefined){
-            return this.monthly_exp
+    get_monthly_expense: async function(_month = "", _year = ""): Promise<Expense> {
+        if (_month == "" || _year==""){
+            if ( this.monthly_exp != undefined){
+                return this.monthly_exp
+            }
+            const m = await this.load_current_month()
+            const exp: Expense = {
+                total_sum: (m.tot_spending).toFixed(2),
+                max_budget: (m.daily_budget * getDaysInMonth(m.month, m.year)).toFixed(2),
+                remains: ((m.daily_budget*this.settings.date.getDate()) - m.tot_spending).toFixed(2),
+                budget_as_today: (m.daily_budget*this.settings.date.getDate()).toFixed(2)
+            }
+            this.monthly_exp = exp
+            return exp 
+        } else {
+            const m = await this.load_month(_month, _year)
+            const max_budget = (m.daily_budget * getDaysInMonth(m.month, m.year))
+            const exp: Expense = {
+                total_sum: (m.tot_spending).toFixed(2),
+                max_budget: max_budget.toFixed(2),
+                remains: ((m.daily_budget*getDaysInMonth(m.month, m.year)) - m.tot_spending).toFixed(2),
+                budget_as_today: max_budget.toFixed(2)
+            }
+            return exp 
         }
-        const m = await this.load_current_month()
-        const exp: Expense = {
-            total_sum: (m.tot_spending).toFixed(2),
-            max_budget: (m.daily_budget * getDaysInMonth(m.month, m.year)).toFixed(2),
-            remains: ((m.daily_budget*this.settings.date.getDate()) - m.tot_spending).toFixed(2),
-            budget_as_today: (m.daily_budget*this.settings.date.getDate()).toFixed(2)
-        }
-        this.monthly_exp = exp
-        return exp 
     },
 
     get_weekly_expense: async function(): Promise<Expense> {

@@ -17,18 +17,23 @@
         </ion-toolbar>
       </ion-header>
       
-      <ion-card v-for="month in months" :key="month">
+      <ion-card v-for="month in months" :key="month" @click="goToPast(month.month, month.year)">
         <ion-card-header>
           <ion-card-title>{{month.total_sum}} {{currency}}</ion-card-title>
           <ion-card-subtitle>{{month.date}}</ion-card-subtitle>
         </ion-card-header>
 
-        <ion-card-content v-if="month.remains >= 0" style="color:green;">
-          {{month.remains.toFixed(2)}} {{currency}} saved!
-        </ion-card-content>
-        <ion-card-content v-if="month.remains < 0" style="color:var(--ion-color-danger);">
-          {{(-month.remains).toFixed(2)}} {{currency}} overspent
-        </ion-card-content>
+        <div style="display:flex; flex-direction: row; align-items: stretch; justify-content: space-between">
+          <ion-card-content v-if="month.remains >= 0" style="color:green;">
+            {{month.remains.toFixed(2)}} {{currency}} saved!
+          </ion-card-content>
+          <ion-card-content v-if="month.remains < 0" style="color:var(--ion-color-danger);">
+            {{(-month.remains).toFixed(2)}} {{currency}} overspent
+          </ion-card-content>
+          <ion-card-content style="text-align:right; font-size: smaller; padding-right: 24px;">
+            Tap to open month details
+          </ion-card-content>
+        </div>
       </ion-card>
 
     </ion-content>
@@ -60,6 +65,9 @@ export default defineComponent({
     }
   },
   methods: {
+    goToPast(m: number, y: number){
+      this.router.replace({ path: '/pastmonth/'+m.toString() + "/" + y.toString() })
+    },
     async init(){
       await model.init()
       this.$data.currency = model.get_default_value()
