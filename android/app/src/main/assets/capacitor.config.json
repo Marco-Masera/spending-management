@@ -1,0 +1,6 @@
+{
+	"appId": "io.ionic.starter",
+	"appName": "SpendingManagement",
+	"webDir": "dist",
+	"bundledWebRuntime": false
+}
