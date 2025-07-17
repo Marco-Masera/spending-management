@@ -165,18 +165,22 @@ export const model: any = {
     },
 
     async import_data(){
-        const multiple_selection = false 
-        const ext = [".json"] 
-        const formData = new FormData(); 
+        let obj:any = undefined; 
         
         const selectedFile = await FilePicker.pickFiles({});
         const path = selectedFile.files[0].path;
-        if (!path){
-            return false
+        try{
+            const blob = await fetch(path!).then((r) => r.blob());
+            const text = await blob.text()
+            obj = JSON.parse(text)
+        } catch (error) {
+            obj = undefined;
         }
-        const blob = await fetch(path).then((r) => r.blob());
-        const text = await blob.text()
-        const obj = JSON.parse(text)
+        if (obj == undefined){
+            obj = JSON.parse(
+                selectedFile.files[0].data!
+            )
+        }
 
         //Check correctness of data:
         if (!obj || !obj.settings || !(obj.settings.language) ||
