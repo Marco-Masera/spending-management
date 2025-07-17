@@ -166,6 +166,7 @@ export const model: any = {
 
     async import_data(){
         let obj:any = undefined; 
+        let obj:any = undefined; 
         
         const selectedFile = await FilePicker.pickFiles({});
         const path = selectedFile.files[0].path;
