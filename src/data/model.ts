@@ -1,9 +1,8 @@
 import { Storage } from '@ionic/storage';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
-import { Plugins } from "@capacitor/core";
 import { objectToString } from '@vue/shared';
-const { FileSelector } = Plugins;
+import { FileSelector } from 'capacitor-file-selector';
 const currentVersion = 5;
 
 export interface Budget{
