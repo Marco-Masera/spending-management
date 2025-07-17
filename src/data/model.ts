@@ -2,7 +2,7 @@ import { Storage } from '@ionic/storage';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { objectToString } from '@vue/shared';
-import { FileSelector } from 'capacitor-file-selector';
+import { FilePicker } from '@capawesome/capacitor-file-picker';
 const currentVersion = 5;
 
 export interface Budget{
@@ -166,13 +166,13 @@ export const model: any = {
         const multiple_selection = false 
         const ext = [".json"] 
         const formData = new FormData(); 
-        const selectedFile = await FileSelector.fileSelector({ 
-                multiple_selection: multiple_selection, 
-                ext: ext 
-            }) 
         
-        const paths = JSON.parse(selectedFile.paths) 
-        const blob = await fetch(paths[0]).then((r) => r.blob());
+        const selectedFile = await FilePicker.pickFiles({});
+        const path = selectedFile.files[0].path
+        if (!path){
+            return false
+        }
+        const blob = await fetch(path).then((r) => r.blob());
         const text = await blob.text()
         const obj = JSON.parse(text)
         //Check correctness of data:
