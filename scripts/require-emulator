@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v adb >/dev/null 2>&1; then
+  echo "adb not found in PATH" >&2
+  exit 1
+fi
+
+if ! adb devices >/dev/null 2>&1; then
+  echo "adb failed; is the Android platform-tools/adb available?" >&2
+  exit 1
+fi
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if ! "${ROOT_DIR}/scripts/emulator-device-id" >/dev/null 2>&1; then
+  echo "No running emulator detected for SMT_EMULATOR_AVD_NAME='${SMT_EMULATOR_AVD_NAME:-spending_api35}'." >&2
+  echo "Start it first: npm run emulator:start" >&2
+  exit 1
+fi

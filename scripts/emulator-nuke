@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+AVD_NAME="${SMT_EMULATOR_AVD_NAME:-spending_api35}"
+
+if ! command -v avdmanager >/dev/null 2>&1; then
+  echo "avdmanager not found in PATH" >&2
+  echo "Enter the emulator dev shell: nix develop .#emulator" >&2
+  exit 1
+fi
+
+if avdmanager list avd 2>/dev/null | grep -q "Name: ${AVD_NAME}$"; then
+  avdmanager delete avd -n "${AVD_NAME}" || true
+fi
+
+rm -rf "${HOME}/.android/avd/${AVD_NAME}.avd" || true
+rm -f "${HOME}/.android/avd/${AVD_NAME}.ini" || true

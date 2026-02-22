@@ -1,7 +1,6 @@
 import { Storage } from '@ionic/storage';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
-import { objectToString } from '@vue/shared';
 import { FilePicker } from '@capawesome/capacitor-file-picker';
 const currentVersion = 5;
 
@@ -35,15 +34,6 @@ export interface ExpenseWithDate{
     year: number
 }
 
-interface GeneralSettings{
-    currency: string,
-    language: string,
-    categories: string[],
-    date: Date,
-    budget: Budget,
-    lastUpdate: number
-}
-
 interface MonthStorage{
     tot_spending: number,
     daily_budget: number,
@@ -66,7 +56,6 @@ function get_daily_budget(budget:Budget, month: number, year: number):number{
     } else {
         return round_n(budget.budget / getDaysInMonth(month, year))
     }
-    return 1
 }
 
 function getFormattedDate(date:Date, language: string): string{
@@ -165,7 +154,7 @@ export const model: any = {
     },
 
     async import_data(){
-        let obj:any = undefined; 
+        let obj: any;
         
         const selectedFile = await FilePicker.pickFiles({});
         const path = selectedFile.files[0].path;
@@ -173,7 +162,7 @@ export const model: any = {
             const blob = await fetch(path!).then((r) => r.blob());
             const text = await blob.text()
             obj = JSON.parse(text)
-        } catch (error) {
+        } catch {
             obj = undefined;
         }
         
@@ -207,7 +196,7 @@ export const model: any = {
 
     async export_data(){
         const allData: any  = {}
-        await this.storage.forEach((value:any, key:string, _: any) => {
+        await this.storage.forEach((value:any, key:string, _store: any) => {
               allData[key] = value
         })
 

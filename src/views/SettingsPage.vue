@@ -57,7 +57,7 @@
   New budget will be applied to current month.
 </p>
 <div class="middle" style="height:45px">
-<ion-button :disabled="budget==0"  @click="saveBudget" style="width:200px">Save budget</ion-button>
+<ion-button :disabled="budget.budget==0"  @click="saveBudget" style="width:200px">Save budget</ion-button>
 </div>
 
 <div class="dividercontainer">
@@ -100,7 +100,7 @@
         <ion-icon :icon="closeCircle" @click="deleteC(item)"></ion-icon>
     </ion-chip>
 
-    <ion-chip @click="isAdding=true" :color=colors[categories.length%5]>
+    <ion-chip @click="openAddPopover($event)" :color=colors[categories.length%5]>
         Add new
     </ion-chip>
 </div>
@@ -121,7 +121,7 @@
  <div style="margin-bottom:100px"></div>
 
 
-<ion-popover :is-open="isAdding" :event="event" @didDismiss="isAdding = false" style="--offset-y: -220px" >
+<ion-popover :is-open="isAdding" :event="popoverEvent" @didDismiss="isAdding = false" style="--offset-y: -220px" >
     <ion-content class="ion-padding"><p class="weightened">Add new category</p></ion-content>
         <div style="margin-left:14px; margin-bottom:10px">
           <ion-item style="width:80%">
@@ -146,7 +146,7 @@ import { defineComponent } from 'vue';
 import { closeCircle } from 'ionicons/icons';
 
 export default defineComponent({
-  name: 'HomePage',
+  name: 'SettingsPage',
   setup(){
     const router = useRouter();
     return { router, closeCircle };
@@ -158,6 +158,7 @@ export default defineComponent({
       categories: [''],
       colors: ["primary", "secondary", "tertiary", "success", "warning"],
       isAdding: false,
+      popoverEvent: undefined as Event | undefined,
       newCatName: "",
       budget: {budget:0, type:0},
       budget_time: 'monthly',
@@ -169,6 +170,10 @@ export default defineComponent({
     }
   },
   methods: {
+    openAddPopover(ev: Event) {
+      this.$data.popoverEvent = ev
+      this.$data.isAdding = true
+    },
     export_data(){
       model.export_data().then( (result: boolean) =>{
           if (result){this.presentToast("Data exported correctly")} else {this.presentToast("Could not export data")}
@@ -191,7 +196,7 @@ export default defineComponent({
               handler: () => {
                 model.import_data().then( (result: boolean) =>{
                   if (result){this.presentToast("Data imported correctly", 5000)} else {this.presentToast("Could not import data", 5000)}
-                }).catch((e:any) => {
+                }).catch(() => {
                   this.presentToast("Could not import data :(", 5000)
                 })
               },

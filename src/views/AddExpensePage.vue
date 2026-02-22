@@ -45,7 +45,7 @@
     >
         {{item}}
     </ion-chip>
-    <ion-chip @click="isAdding=true" :color=colors[categories.length%5] class="chip">
+    <ion-chip @click="openAddPopover($event)" :color=colors[categories.length%5] class="chip">
         Add new
         <ion-icon :icon="add"></ion-icon>
     </ion-chip>
@@ -53,7 +53,7 @@
 </div>
 
 
-<ion-popover :is-open="isAdding" :event="event" @didDismiss="isAdding = false" style="--offset-y: -220px" >
+<ion-popover :is-open="isAdding" :event="popoverEvent" @didDismiss="isAdding = false" style="--offset-y: -220px" >
     <ion-content class="ion-padding"><p class="weightened">Add new category</p></ion-content>
         <div style="margin-left:14px; margin-bottom:10px">
           <ion-item style="width:80%">
@@ -94,7 +94,7 @@ import {checkmarkOutline}from 'ionicons/icons';
 
 
 export default defineComponent({
-  name: 'HomePage',
+  name: 'AddExpensePage',
   setup(){
     const router = useRouter();
     return { router, add, checkmarkOutline };
@@ -105,6 +105,7 @@ export default defineComponent({
       colors: ["primary", "secondary", "tertiary", "success", "warning"],
       selectedCategory: "",
       isAdding: false,
+      popoverEvent: undefined as Event | undefined,
       newCatName: "",
       amount: undefined,
       getBackButtonText: () => {
@@ -115,6 +116,10 @@ export default defineComponent({
     }
   },
   methods: {
+    openAddPopover(ev: Event) {
+      this.$data.popoverEvent = ev
+      this.$data.isAdding = true
+    },
     onInputClick(nativeEl:any){
       nativeEl.target.autofocus=true;
       nativeEl.target.select();

@@ -78,7 +78,7 @@
 
 
       <ion-card class="withborder">
-      <div  v-for="(item, index) in exp_by_cat" :key="item">
+       <div  v-for="(item, index) in exp_by_cat" :key="item[0]">
       <div class = "partoflist">
         <ion-label style="max-width:80%"><p class="list_int">{{item[0]}}</p></ion-label>
         <ion-label>{{item[1]}}{{currency}}</ion-label>
@@ -97,7 +97,7 @@
 
 
       <ion-card class="withborder">
-      <div  v-for="(item, index) in all_exp" :key="item">
+       <div  v-for="(item, index) in all_exp" :key="`${item.date.toISOString()}:${item.category}:${item.cost}`">
       <div class = "partoflistbig">
       <div class = "partoflistsmall">
         <ion-label><p class="list_int">{{item.date.getDate()}}/{{item.date.getMonth()+1}}/{{item.date.getFullYear()}}</p></ion-label>
@@ -145,6 +145,7 @@
 import { useRouter } from 'vue-router';
 import { IonBackButton,IonIcon,IonButtons,IonButton, IonContent,IonFab,IonFabButton, IonHeader, IonPage, IonLabel, IonItemDivider, IonTitle, IonToolbar, IonCard, IonCardContent, IonCardHeader, IonCardSubtitle, IonCardTitle } from '@ionic/vue';
 import { model } from '../data/model'
+import type { SingleExpense } from '../data/model'
 import { defineComponent } from 'vue';
 import {add, closeCircleOutline, calendarClearOutline}from 'ionicons/icons';
 
@@ -154,9 +155,9 @@ export default defineComponent({
     return {
       monthly_exp: model.get_empty_expense(),
       weekly_exp:  model.get_empty_expense(),
-      exp_by_cat: [],
+      exp_by_cat: [] as Array<[string, number]>,
       currency: "€",
-      all_exp: [],
+      all_exp: [] as SingleExpense[],
       date: {month: "", year:""},
       isPast: false,
       getBackButtonText: () => {

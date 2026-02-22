@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+VITE_HOST="0.0.0.0"
+VITE_PORT="5173"
+
+# Android emulator uses this address to reach the host machine.
+CAP_LR_HOST="10.0.2.2"
+
+if ! command -v adb >/dev/null 2>&1; then
+  echo "adb not found in PATH" >&2
+  exit 1
+fi
+
+if ! command -v emulator >/dev/null 2>&1; then
+  echo "emulator not found in PATH" >&2
+  echo "Enter the emulator dev shell: nix develop .#emulator" >&2
+  exit 1
+fi
+
+cleanup() {
+  if [[ -n "${VITE_PID:-}" ]]; then
+    kill "${VITE_PID}" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+
+echo "Starting emulator..." >&2
+"${ROOT_DIR}/scripts/emulator-start" >/tmp/spending-emulator.log 2>&1 &
+
+echo "Waiting for emulator '${SMT_EMULATOR_AVD_NAME:-spending_api35}' to connect via adb..." >&2
+DEVICE_ID=""
+for _ in $(seq 1 180); do
+  if DEVICE_ID="$("${ROOT_DIR}/scripts/emulator-device-id" 2>/dev/null)"; then
+    break
+  fi
+  sleep 1
+done
+
+if [[ -z "${DEVICE_ID}" ]]; then
+  echo "Emulator not detected via adb (timeout)" >&2
+  echo "Emulator log: /tmp/spending-emulator.log" >&2
+  exit 1
+fi
+
+adb -s "${DEVICE_ID}" wait-for-device
+
+# Wait until the system reports boot completed.
+for _ in $(seq 1 180); do
+  if adb -s "${DEVICE_ID}" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' | grep -qx "1"; then
+    break
+  fi
+  sleep 1
+done
+
+if ! adb -s "${DEVICE_ID}" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' | grep -qx "1"; then
+  echo "Emulator did not finish booting (timeout)" >&2
+  echo "Emulator log: /tmp/spending-emulator.log" >&2
+  exit 1
+fi
+
+echo "Starting Vite dev server on ${VITE_HOST}:${VITE_PORT}..." >&2
+(cd "${ROOT_DIR}" && npm run dev -- --host "${VITE_HOST}" --port "${VITE_PORT}" --strictPort) &
+VITE_PID=$!
+
+echo "Launching Capacitor run with live reload..." >&2
+echo "- Device: ${DEVICE_ID}" >&2
+echo "- Live reload URL: http://${CAP_LR_HOST}:${VITE_PORT}" >&2
+
+adb -s "${DEVICE_ID}" uninstall io.ionic.starter >/dev/null 2>&1 || true
+
+cd "${ROOT_DIR}"
+exec npx cap run android -l --host "${CAP_LR_HOST}" --port "${VITE_PORT}" --forwardPorts "${VITE_PORT}:${VITE_PORT}" --target "${DEVICE_ID}"

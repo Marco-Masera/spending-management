@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+AVD_NAME="${SMT_EMULATOR_AVD_NAME:-spending_api35}"
+SYS_IMG="system-images;android-35;default;x86_64"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+"${SCRIPT_DIR}/emulator-nuke"
+
+if ! command -v emulator >/dev/null 2>&1; then
+  echo "emulator not found in PATH" >&2
+  echo "Enter the emulator dev shell: nix develop .#emulator" >&2
+  exit 1
+fi
+
+if ! command -v avdmanager >/dev/null 2>&1; then
+  echo "avdmanager not found in PATH" >&2
+  echo "Enter the emulator dev shell: nix develop .#emulator" >&2
+  exit 1
+fi
+
+if ! emulator -list-avds | grep -qx "${AVD_NAME}"; then
+  echo "AVD '${AVD_NAME}' not found; creating it..." >&2
+  # 'echo no' avoids the "use custom hardware profile" prompt.
+  echo no | avdmanager create avd -n "${AVD_NAME}" -k "${SYS_IMG}" --device "pixel" --force
+fi
+
+exec emulator -avd "${AVD_NAME}" -netdelay none -netspeed full
