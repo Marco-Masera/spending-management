@@ -12,19 +12,6 @@ export default [
   js.configs.recommended,
   ...vue.configs['flat/essential'],
   {
-    files: ['cypress/**/*.{js,ts,jsx,tsx}'],
-    languageOptions: {
-      globals: {
-        ...globals.mocha,
-        cy: 'readonly',
-        Cypress: 'readonly',
-      },
-    },
-    rules: {
-      'no-undef': 'off',
-    },
-  },
-  {
     files: ['**/*.{ts,tsx,vue}'],
     languageOptions: {
       parser: vueParser,
