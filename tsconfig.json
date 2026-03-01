@@ -10,34 +10,22 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "sourceMap": true,
-    "baseUrl": ".",
-    "types": [
-      "vite/client",
-      "vitest/globals"
-    ],
+    "types": ["vite/client", "vitest/globals"],
     "paths": {
-      "@/*": [
-        "src/*"
-      ]
+      "@/*": ["./src/*"],
+      "*": ["./*"]
     },
-    "lib": [
-      "ES2022",
-      "dom",
-      "dom.iterable",
-      "scripthost"
-    ]
+    "lib": ["ES2022", "dom", "dom.iterable", "scripthost"]
   },
   "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "src/**/*.vue",
-    "src/**/*.test.ts",
-    "src/**/*.test.tsx",
-    "vite.config.ts",
-    "tests/**/*.ts",
-    "tests/**/*.tsx"
+    "./src/**/*.ts",
+    "./src/**/*.tsx",
+    "./src/**/*.vue",
+    "./src/**/*.test.ts",
+    "./src/**/*.test.tsx",
+    "./vite.config.ts",
+    "./tests/**/*.ts",
+    "./tests/**/*.tsx"
   ],
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["node_modules"]
 }
