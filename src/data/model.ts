@@ -121,6 +121,192 @@ function categoryId(name: string): string {
   return `cat_${encodeURIComponent(name)}`;
 }
 
+type LegacySpendingItem = {
+  category?: unknown;
+  cost?: unknown;
+  date?: unknown;
+};
+
+function isRecord(x: unknown): x is Record<string, any> {
+  return typeof x === "object" && x !== null && !Array.isArray(x);
+}
+
+function asFiniteNumber(x: unknown): number | undefined {
+  const n = typeof x === "number" ? x : Number(x);
+  if (!Number.isFinite(n)) return undefined;
+  return n;
+}
+
+function parseIsoTs(x: unknown): number | undefined {
+  const s = String(x ?? "").trim();
+  if (!s) return undefined;
+  const ts = Date.parse(s);
+  if (!Number.isFinite(ts)) return undefined;
+  return ts;
+}
+
+function decodeBase64Utf8(data: unknown): string | undefined {
+  const b64 = String(data ?? "").trim();
+  if (!b64) return undefined;
+
+  try {
+    // Prefer atob + TextDecoder for proper UTF-8 handling.
+    const bin = typeof atob === "function" ? atob(b64) : undefined;
+    if (bin === undefined) return undefined;
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    if (typeof TextDecoder !== "undefined") {
+      return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    }
+    // Fallback: best-effort (works for ASCII JSON).
+    return bin;
+  } catch {
+    return undefined;
+  }
+}
+
+function legacyDocsDebugStats(docs: any[]): Record<string, any> {
+  const counts: Record<string, number> = {};
+  let minTs: number | undefined;
+  let maxTs: number | undefined;
+  const cats = new Set<string>();
+  for (const d of docs) {
+    const t = String((d as any)?.type ?? "unknown");
+    counts[t] = (counts[t] || 0) + 1;
+    if (t === "expense") {
+      const ts = (d as any)?.ts;
+      if (typeof ts === "number" && Number.isFinite(ts)) {
+        minTs = minTs === undefined ? ts : Math.min(minTs, ts);
+        maxTs = maxTs === undefined ? ts : Math.max(maxTs, ts);
+      }
+      const c = String((d as any)?.category ?? "").trim();
+      if (c) cats.add(c);
+    }
+    if (t === "category") {
+      const c = String((d as any)?.name ?? "").trim();
+      if (c) cats.add(c);
+    }
+  }
+
+  return {
+    total: docs.length,
+    counts,
+    uniqueCategories: cats.size,
+    minExpenseIso: minTs ? new Date(minTs).toISOString() : undefined,
+    maxExpenseIso: maxTs ? new Date(maxTs).toISOString() : undefined,
+  };
+}
+
+export function legacyToDocs(input: unknown): any[] {
+  if (!isRecord(input)) return [];
+
+  const buckets: {
+    month: number;
+    year: number;
+    dailyBudget: number;
+    spending: LegacySpendingItem[];
+  }[] = [];
+
+  for (const v of Object.values(input) as any[]) {
+    if (!isRecord(v)) continue;
+    const month = Number(v.month);
+    const year = Number(v.year);
+    const spending = Array.isArray(v.spending) ? (v.spending as any[]) : null;
+
+    if (!Number.isInteger(month) || month < 0 || month > 11) continue;
+    if (!Number.isInteger(year) || year < 2000 || year > 3000) continue;
+    if (!spending) continue;
+
+    const dailyBudget = asFiniteNumber(v.daily_budget) ?? 0;
+    buckets.push({
+      month,
+      year,
+      dailyBudget,
+      spending: spending.filter(isRecord) as any,
+    });
+  }
+
+  buckets.sort((a, b) => a.year * 100 + a.month - (b.year * 100 + b.month));
+  const lastBucket = buckets.length > 0 ? buckets[buckets.length - 1] : undefined;
+
+  const categoriesSeen: string[] = [];
+  const categoriesSet = new Set<string>();
+  for (const b of buckets) {
+    for (const it of b.spending) {
+      const name = String((it as any)?.category ?? "").trim();
+      if (!name) continue;
+      if (categoriesSet.has(name)) continue;
+      categoriesSet.add(name);
+      categoriesSeen.push(name);
+    }
+  }
+
+  const categoryNames =
+    categoriesSeen.length > 0 ? categoriesSeen : [...DEFAULT_CATEGORIES];
+
+  const settingsBudgetDaily =
+    (lastBucket ? asFiniteNumber(lastBucket.dailyBudget) : undefined) ??
+    (isRecord((input as any).settings)
+      ? asFiniteNumber((input as any).settings.daily_budget)
+      : undefined) ??
+    0;
+
+  const docs: any[] = [];
+
+  const settings: SettingsDoc = {
+    _id: "settings",
+    type: "settings",
+    currency: DEFAULT_CURRENCY,
+    language: DEFAULT_LANGUAGE,
+    couchdbURL: normalizeCouchdbUrl(""),
+    budget: { type: BudgetType.Daily, budget: round2(settingsBudgetDaily) },
+    lastUpdate: currentVersion,
+  };
+  docs.push(settings);
+
+  for (const name of categoryNames) {
+    const d: CategoryDoc = {
+      _id: categoryId(name),
+      type: "category",
+      name,
+    };
+    docs.push(d);
+  }
+
+  for (const b of buckets) {
+    const d: MonthDoc = {
+      _id: monthId(b.month, b.year),
+      type: "month",
+      month: b.month,
+      year: b.year,
+      budget: { type: BudgetType.Daily, budget: round2(b.dailyBudget) },
+    };
+    docs.push(d);
+  }
+
+  for (const b of buckets) {
+    for (const it of b.spending) {
+      const category = String((it as any)?.category ?? "").trim();
+      if (!category) continue;
+      const ts = parseIsoTs((it as any)?.date);
+      if (ts === undefined) continue;
+      const cost = asFiniteNumber((it as any)?.cost);
+      if (cost === undefined) continue;
+
+      const d: ExpenseDoc = {
+        _id: makeExpenseId(ts),
+        type: "expense",
+        ts,
+        cost: round2(cost),
+        category,
+      };
+      docs.push(d);
+    }
+  }
+
+  return docs;
+}
+
 function getFormattedMonthLabel(date: Date, language: string): string {
   if (language === "en") {
     const n = [
@@ -879,14 +1065,27 @@ export function createModel(defaultDbName = "spending-management") {
 
     async import_data(): Promise<boolean> {
       await this.ensureInit();
-      const selectedFile = await FilePicker.pickFiles({});
-      const path = selectedFile.files[0].path;
-      if (!path) return false;
+      let selectedFile: any;
+      try {
+        selectedFile = await FilePicker.pickFiles({ readData: true } as any);
+      } catch {
+        return false;
+      }
+
+      const file = selectedFile?.files?.[0];
+      const path = file?.path;
+      const data = file?.data;
+      if (!path && !data) return false;
 
       let obj: any;
       try {
-        const blob = await fetch(path).then((r) => r.blob());
-        const text = await blob.text();
+        let text = "";
+        if (path) {
+          const blob = await fetch(path).then((r) => r.blob());
+          text = await blob.text();
+        } else {
+          text = decodeBase64Utf8(data) ?? "";
+        }
         obj = JSON.parse(text);
       } catch {
         return false;
@@ -945,9 +1144,147 @@ export function createModel(defaultDbName = "spending-management") {
       return true;
     },
 
-    // Test helpers
-    async __test_destroy_db() {
-      this._stopSync();
+    async import_legacy_data(): Promise<boolean> {
+      await this.ensureInit();
+      let selectedFile: any;
+      try {
+        selectedFile = await FilePicker.pickFiles({ readData: true } as any);
+      } catch (e) {
+        logger.warn("[import_legacy] file picker failed", e);
+        return false;
+      }
+      const file = selectedFile?.files?.[0];
+      const path = file?.path;
+      const data = file?.data;
+      if (!path && !data) {
+        logger.warn("[import_legacy] missing selected file payload", {
+          files: Array.isArray(selectedFile?.files)
+            ? selectedFile.files.map((f: any) => ({
+                name: f?.name,
+                path: f?.path,
+                hasData: typeof f?.data === "string" && f.data.length > 0,
+                mimeType: f?.mimeType,
+                size: f?.size,
+              }))
+            : selectedFile?.files,
+        });
+        return false;
+      }
+      logger.info("[import_legacy] selected file", {
+        hasPath: Boolean(path),
+        hasData: typeof data === "string" && data.length > 0,
+      });
+
+      let obj: any;
+      try {
+        let text = "";
+        if (path) {
+          const resp = await fetch(path);
+          logger.info("[import_legacy] fetch ok", {
+            status: (resp as any)?.status,
+            ok: (resp as any)?.ok,
+          });
+          const blob = await resp.blob();
+          text = await blob.text();
+        } else {
+          text = decodeBase64Utf8(data) ?? "";
+          logger.info("[import_legacy] decoded file data", { bytes: text.length });
+        }
+        obj = JSON.parse(text);
+      } catch (e) {
+        logger.warn("[import_legacy] failed to read/parse JSON", e);
+        return false;
+      }
+
+      const docs = legacyToDocs(obj);
+      if (!Array.isArray(docs) || docs.length === 0) {
+        logger.warn("[import_legacy] conversion produced no docs", {
+          inputType: typeof obj,
+          isArray: Array.isArray(obj),
+          keys: isRecord(obj) ? Object.keys(obj).slice(0, 20) : undefined,
+        });
+        return false;
+      }
+      logger.info("[import_legacy] converted legacy docs", legacyDocsDebugStats(docs));
+
+      // Replace DB contents entirely.
+      const dbName = this.dbName;
+      try {
+        await this.db!.destroy();
+      } catch (e) {
+        logger.warn("[import_legacy] failed to destroy existing db", e);
+        return false;
+      }
+      this.db = await openDb(dbName, this.platform);
+      this.isInit = true;
+
+      const cleaned = docs
+        .filter((d) => d && typeof (d as any)._id === "string")
+        .map((d) => {
+          const c = { ...d };
+          delete (c as any)._rev;
+          return c;
+        });
+
+      if (cleaned.length > 0) {
+        try {
+          const res: any = await this.db.bulkDocs(cleaned);
+          // bulkDocs can partially fail; log any per-doc errors.
+          const errors = Array.isArray(res)
+            ? res.filter((r: any) => r && r.error)
+            : [];
+          if (errors.length > 0) {
+            logger.warn("[import_legacy] bulkDocs reported errors", {
+              count: errors.length,
+              sample: errors.slice(0, 5).map((e: any) => ({
+                id: e?.id,
+                status: e?.status,
+                name: e?.name,
+                message: e?.message,
+              })),
+            });
+          }
+        } catch (e) {
+          logger.warn("[import_legacy] bulkDocs failed", e);
+          return false;
+        }
+      }
+
+      this.settings = await safeGet<SettingsDoc>(this.db, "settings");
+      if (!this.settings) {
+        // Should not happen, but keep behavior consistent.
+        logger.warn("[import_legacy] settings doc missing after import; reseeding");
+        const settings: SettingsDoc = {
+          _id: "settings",
+          type: "settings",
+          currency: DEFAULT_CURRENCY,
+          language: DEFAULT_LANGUAGE,
+          couchdbURL: normalizeCouchdbUrl(""),
+          budget: { type: BudgetType.Daily, budget: 0 },
+          lastUpdate: currentVersion,
+        };
+        await this.db.put(settings);
+        this.settings = settings;
+      }
+
+      const catsRes = await this.db.allDocs({
+        include_docs: true,
+        startkey: "cat_",
+        endkey: "cat_\uffff",
+      });
+      this.categories = catsRes.rows
+        .map((r: any) => (r.doc as any)?.name)
+        .filter((n: any): n is string => typeof n === "string");
+
+      this.weekly_exp = undefined;
+      this.monthly_exp = undefined;
+
+      await this._restartSync();
+      return true;
+    },
+
+    async _teardownLocalState() {
+      this._stopSync("teardown");
       if (this._onlineListener) {
         window.removeEventListener("online", this._onlineListener);
       }
@@ -964,7 +1301,15 @@ export function createModel(defaultDbName = "spending-management") {
       }
       this._appStateListener = undefined;
       this._hooksSetup = false;
-      if (this.db) await this.db.destroy();
+
+      if (this.db) {
+        try {
+          await this.db.destroy();
+        } catch {
+          // ignore
+        }
+      }
+
       this.db = undefined;
       this.settings = undefined;
       this.isInit = false;
@@ -972,6 +1317,42 @@ export function createModel(defaultDbName = "spending-management") {
       this.categories = [];
       this.weekly_exp = undefined;
       this.monthly_exp = undefined;
+    },
+
+    async clear_data(): Promise<void> {
+      // Stop sync first to avoid racing with remote deletion.
+      this._stopSync("clear_data");
+
+      const remoteUrl = (() => {
+        try {
+          const raw = this.settings ? this.settings.couchdbURL : "";
+          return normalizeCouchdbUrl(raw);
+        } catch {
+          return "";
+        }
+      })();
+
+      // Best-effort remote deletion (requires CouchDB admin perms).
+      if (remoteUrl && remoteUrl.length > 0) {
+        try {
+          const remote = new PouchDB(remoteUrl);
+          await remote.destroy();
+          logger.info("[clear_data] remote destroyed", { url: remoteUrl });
+        } catch (e) {
+          logger.warn("[clear_data] remote destroy failed", e);
+        }
+      }
+
+      // Destroy local DB and reset in-memory state.
+      await this._teardownLocalState();
+
+      // Re-seed defaults.
+      await this.init({ dbName: this.dbName, platform: this.platform });
+    },
+
+    // Test helpers
+    async __test_destroy_db() {
+      await this._teardownLocalState();
     },
   };
 }

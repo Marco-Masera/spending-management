@@ -17,23 +17,16 @@ nix develop
 ####
 # CouchDB (local dev)
 ####
+# Local CouchDB data lives under .couchdb/ (ignored by git)
+# Web UI: http://127.0.0.1:5984/_utils/#login
 
 # Start CouchDB (creates the DB if missing)
 npm run db:dev
 
-# CouchDB URLs to paste into the in-app Settings:
+# CouchDB URLs for sync (already automatically applied via env variables for dev):
 # - Web (host browser):    http://admin:admin@127.0.0.1:5984/spending
 # - Android emulator only: http://admin:admin@10.0.2.2:5984/spending
-#
-# CouchDB requires an admin user; db:dev sets one by default:
-# - COUCHDB_ADMIN_USER=admin
-# - COUCHDB_ADMIN_PASSWORD=admin
 
-# Local CouchDB data lives under .couchdb/ (ignored by git)
-
-# Default CouchDB URL (dev)
-# - Web dev defaults to http://admin:admin@127.0.0.1:5984/spending via .env
-# - Emulator dev defaults to http://admin:admin@10.0.2.2:5984/spending via .env.emulator (vite --mode emulator)
 
 ####
 # Both android & web

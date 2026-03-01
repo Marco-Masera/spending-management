@@ -113,10 +113,12 @@
         </p>
       </ion-item-divider>
  </div>
- <div class="middle" style = "margin-top: 24px;">
-  <ion-button @click="export_data()" style="padding-left:10px; padding-right:10px">Export data</ion-button>
-  <ion-button @click="import_data()" style="padding-left:10px; padding-right:10px">Import data</ion-button>
- </div>
+  <div class="middle data-buttons" style="margin-top: 24px;">
+   <ion-button @click="export_data()">Export data</ion-button>
+   <ion-button @click="import_data()">Import data</ion-button>
+   <ion-button @click="import_legacy_data()">Import legacy</ion-button>
+   <ion-button color="danger" @click="clear_data()">Clear data</ion-button>
+  </div>
 
  <div class="dividercontainer" style="margin-top: 18px;">
        <ion-item-divider class="withtopborder">
@@ -183,6 +185,7 @@ import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { LOG_FILE_PATH } from '@/lib/logger'
+import { logger } from '@/lib/logger'
 import { DEFAULT_COUCHDB_URL } from '@/data/modelDefaults'
 
 export default defineComponent({
@@ -251,6 +254,77 @@ export default defineComponent({
         await alert.onDidDismiss();
       
 
+    },
+    async import_legacy_data(){
+      logger.info('[settings] import legacy clicked')
+      const alert = await alertController.create({
+          header: 'Warning: imported data will overwrite local app data. Continue?',
+          buttons: [
+            {
+              text: 'Cancel',
+              role: 'cancel',
+              handler: () => {
+                console.log(".")
+              },
+            },
+            {
+              text: 'Continue',
+              role: 'confirm',
+              handler: () => {
+                model.import_legacy_data().then(async (result: boolean) =>{
+                  logger.info('[settings] import legacy finished', { result })
+                  if (result){
+                    this.presentToast("Data imported correctly", 5000)
+                    await this.init()
+                  } else {
+                    this.presentToast("Could not import data", 5000)
+                  }
+                }).catch(() => {
+                  logger.warn('[settings] import legacy threw')
+                  this.presentToast("Could not import data :(", 5000)
+                })
+              },
+            },
+          ],
+        });
+
+        await alert.present();
+
+        await alert.onDidDismiss();
+    },
+    async clear_data(){
+      const alert = await alertController.create({
+        header: 'Clear all data?',
+        message: 'This will delete all local app data and reset the app to defaults. This cannot be undone.',
+        buttons: [
+          {
+            text: 'Cancel',
+            role: 'cancel',
+            handler: () => {
+              console.log(".")
+            },
+          },
+          {
+            text: 'Clear data',
+            role: 'destructive',
+            handler: () => {
+              this.doClearData()
+            },
+          },
+        ],
+      });
+
+      await alert.present();
+      await alert.onDidDismiss();
+    },
+    async doClearData(){
+      try {
+        await model.clear_data()
+        // Multiple pages only init on created(); a full reload avoids stale cached state.
+        window.location.reload()
+      } catch {
+        this.presentToast('Could not clear data', 2500)
+      }
     },
     updateCurrency(){
       model.set_default_value(this.$data.currency)
@@ -373,3 +447,20 @@ export default defineComponent({
   }
 });
 </script>
+
+<style scoped>
+.data-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+
+.data-buttons ion-button {
+  margin: 0;
+  --padding-start: 10px;
+  --padding-end: 10px;
+  white-space: nowrap;
+}
+</style>

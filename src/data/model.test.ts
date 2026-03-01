@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createModel } from '@/data/model'
+import { DEFAULT_CATEGORIES } from '@/data/modelDefaults'
 
 function monthId(month0: number, year: number) {
   const ym = year * 100 + (month0 + 1)
@@ -101,6 +102,35 @@ describe('pouchdb-backed model', () => {
 
     await m.set_couchdb_url('')
     expect(handler.cancel).toHaveBeenCalledTimes(1)
+
+    await m.__test_destroy_db()
+  })
+
+  it('clears local data and reseeds defaults', async () => {
+    const now = new Date(2026, 1, 10, 12, 0, 0).getTime()
+    vi.spyOn(Date, 'now').mockReturnValue(now)
+
+    const m: any = createModel(`test-clear-${Date.now()}-${Math.random()}`)
+    await m.init({ platform: 'web' })
+
+    m.set_default_value('$')
+    await m.set_budget(0, 123)
+    expect(m.get_default_value()).toBe('$')
+    expect(m.get_budget()).toEqual({ type: 0, budget: 123 })
+
+    m.add_category('Custom')
+    expect(m.get_categories()).toContain('Custom')
+    await m.add_expense(10, 'Custom')
+    const before = await m.get_all_month_expenses()
+    expect(before.length).toBe(1)
+
+    await m.clear_data()
+
+    expect(m.get_default_value()).toBe('€')
+    expect(m.get_budget()).toEqual({ type: 0, budget: 0 })
+    expect(m.get_categories()).toEqual(DEFAULT_CATEGORIES)
+    const after = await m.get_all_month_expenses()
+    expect(after.length).toBe(0)
 
     await m.__test_destroy_db()
   })
