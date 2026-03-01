@@ -57,7 +57,7 @@
   New budget will be applied to current month.
 </p>
 <div class="middle" style="height:45px">
-<ion-button :disabled="budget==0"  @click="saveBudget" style="width:200px">Save budget</ion-button>
+<ion-button :disabled="budget.budget==0"  @click="saveBudget" style="width:200px">Save budget</ion-button>
 </div>
 
 <div class="dividercontainer">
@@ -100,7 +100,7 @@
         <ion-icon :icon="closeCircle" @click="deleteC(item)"></ion-icon>
     </ion-chip>
 
-    <ion-chip @click="isAdding=true" :color=colors[categories.length%5]>
+    <ion-chip @click="openAddPopover($event)" :color=colors[categories.length%5]>
         Add new
     </ion-chip>
 </div>
@@ -113,15 +113,52 @@
         </p>
       </ion-item-divider>
  </div>
- <div class="middle" style = "margin-top: 24px;">
-  <ion-button @click="export_data()" style="padding-left:10px; padding-right:10px">Export data</ion-button>
-  <ion-button @click="import_data()" style="padding-left:10px; padding-right:10px">Import data</ion-button>
-</div>
+  <div class="middle data-buttons" style="margin-top: 24px;">
+   <ion-button @click="export_data()">Export data</ion-button>
+   <ion-button @click="import_data()">Import data</ion-button>
+   <ion-button @click="import_legacy_data()">Import legacy</ion-button>
+   <ion-button color="danger" @click="clear_data()">Clear data</ion-button>
+  </div>
 
- <div style="margin-bottom:100px"></div>
+ <div class="dividercontainer" style="margin-top: 18px;">
+       <ion-item-divider class="withtopborder">
+        <p class="weightened">
+        CouchDB sync
+        </p>
+      </ion-item-divider>
+ </div>
+
+ <div class="amountdiv" style="margin-top:14px; margin-bottom:12px">
+    <ion-item style="width:85%">
+      <ion-label position="floating">CouchDB URL:</ion-label>
+      <ion-input
+        type="text"
+        v-model="couchdbURL"
+        :placeholder="defaultCouchdbUrl || 'https://user:pass@host:5984/db'"
+      ></ion-input>
+    </ion-item>
+  </div>
+
+  <div class="middle" style="height:45px">
+    <ion-button @click="saveCouchdbURL">Save sync URL</ion-button>
+  </div>
+
+  <div class="dividercontainer" style="margin-top: 18px;">
+       <ion-item-divider class="withtopborder">
+        <p class="weightened">
+        Logs
+        </p>
+      </ion-item-divider>
+ </div>
+
+ <div class="middle" style="height:45px">
+   <ion-button @click="export_logs">Export logs</ion-button>
+ </div>
+
+   <div style="margin-bottom:100px"></div>
 
 
-<ion-popover :is-open="isAdding" :event="event" @didDismiss="isAdding = false" style="--offset-y: -220px" >
+<ion-popover :is-open="isAdding" :event="popoverEvent" @didDismiss="isAdding = false" style="--offset-y: -220px" >
     <ion-content class="ion-padding"><p class="weightened">Add new category</p></ion-content>
         <div style="margin-left:14px; margin-bottom:10px">
           <ion-item style="width:80%">
@@ -144,9 +181,15 @@ import { alertController , IonIcon, IonChip, IonButtons, IonButton, IonPopover, 
 import { model } from '../data/model'
 import { defineComponent } from 'vue';
 import { closeCircle } from 'ionicons/icons';
+import { Capacitor } from '@capacitor/core'
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
+import { LOG_FILE_PATH } from '@/lib/logger'
+import { logger } from '@/lib/logger'
+import { DEFAULT_COUCHDB_URL } from '@/data/modelDefaults'
 
 export default defineComponent({
-  name: 'HomePage',
+  name: 'SettingsPage',
   setup(){
     const router = useRouter();
     return { router, closeCircle };
@@ -154,10 +197,13 @@ export default defineComponent({
   data() {
     return {
       currency: "",
+      couchdbURL: "",
+      defaultCouchdbUrl: DEFAULT_COUCHDB_URL,
       isfirst: false,
       categories: [''],
       colors: ["primary", "secondary", "tertiary", "success", "warning"],
       isAdding: false,
+      popoverEvent: undefined as Event | undefined,
       newCatName: "",
       budget: {budget:0, type:0},
       budget_time: 'monthly',
@@ -169,6 +215,10 @@ export default defineComponent({
     }
   },
   methods: {
+    openAddPopover(ev: Event) {
+      this.$data.popoverEvent = ev
+      this.$data.isAdding = true
+    },
     export_data(){
       model.export_data().then( (result: boolean) =>{
           if (result){this.presentToast("Data exported correctly")} else {this.presentToast("Could not export data")}
@@ -191,7 +241,7 @@ export default defineComponent({
               handler: () => {
                 model.import_data().then( (result: boolean) =>{
                   if (result){this.presentToast("Data imported correctly", 5000)} else {this.presentToast("Could not import data", 5000)}
-                }).catch((e:any) => {
+                }).catch(() => {
                   this.presentToast("Could not import data :(", 5000)
                 })
               },
@@ -205,17 +255,141 @@ export default defineComponent({
       
 
     },
+    async import_legacy_data(){
+      logger.info('[settings] import legacy clicked')
+      const alert = await alertController.create({
+          header: 'Warning: imported data will overwrite local app data. Continue?',
+          buttons: [
+            {
+              text: 'Cancel',
+              role: 'cancel',
+              handler: () => {
+                console.log(".")
+              },
+            },
+            {
+              text: 'Continue',
+              role: 'confirm',
+              handler: () => {
+                model.import_legacy_data().then(async (result: boolean) =>{
+                  logger.info('[settings] import legacy finished', { result })
+                  if (result){
+                    this.presentToast("Data imported correctly", 5000)
+                    await this.init()
+                  } else {
+                    this.presentToast("Could not import data", 5000)
+                  }
+                }).catch(() => {
+                  logger.warn('[settings] import legacy threw')
+                  this.presentToast("Could not import data :(", 5000)
+                })
+              },
+            },
+          ],
+        });
+
+        await alert.present();
+
+        await alert.onDidDismiss();
+    },
+    async clear_data(){
+      const alert = await alertController.create({
+        header: 'Clear all data?',
+        message: 'This will delete all local app data and reset the app to defaults. This cannot be undone.',
+        buttons: [
+          {
+            text: 'Cancel',
+            role: 'cancel',
+            handler: () => {
+              console.log(".")
+            },
+          },
+          {
+            text: 'Clear data',
+            role: 'destructive',
+            handler: () => {
+              this.doClearData()
+            },
+          },
+        ],
+      });
+
+      await alert.present();
+      await alert.onDidDismiss();
+    },
+    async doClearData(){
+      try {
+        await model.clear_data()
+        // Multiple pages only init on created(); a full reload avoids stale cached state.
+        window.location.reload()
+      } catch {
+        this.presentToast('Could not clear data', 2500)
+      }
+    },
     updateCurrency(){
       model.set_default_value(this.$data.currency)
       this.presentToast("Currency updated")
     },
+    async saveCouchdbURL(){
+      try{
+        await model.set_couchdb_url(this.$data.couchdbURL)
+        this.presentToast("Sync URL updated")
+      } catch {
+        // Never error the user for sync failures.
+        this.presentToast("Sync URL updated")
+      }
+    },
+    async export_logs(){
+      if (Capacitor.getPlatform() !== 'android'){
+        this.presentToast('Export logs is only available on Android', 2500)
+        return
+      }
+
+      try {
+        // If the file doesn't exist yet, create it.
+        try {
+          await Filesystem.stat({ directory: Directory.Data, path: LOG_FILE_PATH })
+        } catch {
+          await Filesystem.mkdir({ directory: Directory.Data, path: 'logs', recursive: true })
+          await Filesystem.writeFile({
+            directory: Directory.Data,
+            path: LOG_FILE_PATH,
+            data: `${new Date().toISOString()} INFO [log] created via export\n`,
+            encoding: Encoding.UTF8,
+          })
+        }
+
+        const uriRes: any = await Filesystem.getUri({ directory: Directory.Data, path: LOG_FILE_PATH })
+        const uri = uriRes?.uri
+        if (!uri) throw new Error('missing log uri')
+
+        await Share.share({
+          title: 'app.log',
+          url: uri,
+          dialogTitle: 'Save log file',
+        })
+        this.presentToast('Log exported', 1500)
+      } catch {
+        this.presentToast('Could not export logs', 2500)
+      }
+    },
     onInputClick(nativeEl:any){
-      nativeEl.target.autofocus=true;
-      nativeEl.target.select();
+      const t = nativeEl?.target
+      if (!t) return
+      try {
+        t.autofocus = true
+      } catch {
+        // ignore
+      }
+      if (typeof t.select === 'function') {
+        t.select()
+      }
     },
     async init(){
       await model.init()
       this.$data.currency = model.get_default_value()
+      const savedUrl = model.get_couchdb_url ? model.get_couchdb_url() : ""
+      this.$data.couchdbURL = savedUrl || this.$data.defaultCouchdbUrl || ""
       this.$data.categories = model.get_categories()
       this.$data.budget = model.get_budget()
       if (this.$data.budget.type != 0){
@@ -273,3 +447,20 @@ export default defineComponent({
   }
 });
 </script>
+
+<style scoped>
+.data-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+
+.data-buttons ion-button {
+  margin: 0;
+  --padding-start: 10px;
+  --padding-end: 10px;
+  white-space: nowrap;
+}
+</style>

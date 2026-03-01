@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+COUCHDB_BIND="${COUCHDB_BIND:-127.0.0.1}"
+COUCHDB_PORT="${COUCHDB_PORT:-5984}"
+COUCHDB_DB="${COUCHDB_DB:-spending}"
+COUCHDB_ADMIN_USER="${COUCHDB_ADMIN_USER:-admin}"
+COUCHDB_ADMIN_PASSWORD="${COUCHDB_ADMIN_PASSWORD:-admin}"
+
+# CORS: when credentials are included, CouchDB must echo a specific Origin (not '*').
+# Comma-separated list of allowed origins.
+# Defaults cover:
+# - Web dev server: http://localhost:5173
+# - Android emulator live reload (typical): http://10.0.2.2:5173
+# - Capacitor/Cordova webview origins: http(s)://localhost, capacitor://localhost, ionic://localhost
+COUCHDB_CORS_ORIGINS="${COUCHDB_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://10.0.2.2:5173,http://localhost,https://localhost,capacitor://localhost,ionic://localhost}"
+
+# 0.0.0.0 is valid to bind, but not to connect to.
+COUCHDB_CONNECT_HOST="${COUCHDB_BIND}"
+if [[ "${COUCHDB_CONNECT_HOST}" == "0.0.0.0" ]]; then
+  COUCHDB_CONNECT_HOST="127.0.0.1"
+fi
+
+VEND_DIR="${ROOT_DIR}/.vend"
+COUCHDB_DIR="${VEND_DIR}/couchdb"
+DATA_DIR="${COUCHDB_DIR}/data"
+VIEW_DIR="${COUCHDB_DIR}/view_index"
+LOG_DIR="${COUCHDB_DIR}/logs"
+INI_FILE="${COUCHDB_DIR}/local.ini"
+
+if ! command -v couchdb >/dev/null 2>&1; then
+  echo "couchdb not found in PATH" >&2
+  echo "Enter the dev shell: nix develop" >&2
+  exit 1
+fi
+
+mkdir -p "${DATA_DIR}" "${VIEW_DIR}" "${LOG_DIR}"
+
+COUCHDB_ROOTDIR="$(cd "$(dirname "$(command -v couchdb)")/.." && pwd)"
+DEFAULT_INI_FILE="${COUCHDB_ROOTDIR}/etc/default.ini"
+if [[ ! -f "${DEFAULT_INI_FILE}" ]]; then
+  echo "CouchDB default.ini not found at ${DEFAULT_INI_FILE}" >&2
+  exit 1
+fi
+
+cat >"${INI_FILE}" <<EOF
+[couchdb]
+database_dir = ${DATA_DIR}
+view_index_dir = ${VIEW_DIR}
+
+[admins]
+${COUCHDB_ADMIN_USER} = ${COUCHDB_ADMIN_PASSWORD}
+
+[chttpd]
+bind_address = ${COUCHDB_BIND}
+port = ${COUCHDB_PORT}
+enable_cors = true
+
+[cors]
+# Must not be '*' when credentials are used.
+origins = ${COUCHDB_CORS_ORIGINS}
+credentials = true
+methods = GET, PUT, POST, HEAD, DELETE, OPTIONS
+headers = accept, authorization, content-type, origin, referer, x-requested-with, if-match, if-none-match
+exposed_headers = location, etag
+
+[log]
+file = ${LOG_DIR}/couchdb.log
+level = info
+EOF
+
+cleanup() {
+  if [[ -n "${COUCHDB_PID:-}" ]]; then
+    kill "${COUCHDB_PID}" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+
+echo "Starting CouchDB on http://${COUCHDB_BIND}:${COUCHDB_PORT} ..." >&2
+
+# Run in background so we can create the target DB before returning.
+COUCHDB_INI_FILES="${DEFAULT_INI_FILE} ${INI_FILE}" couchdb &
+COUCHDB_PID=$!
+
+export COUCHDB_CONNECT_HOST COUCHDB_PORT COUCHDB_DB COUCHDB_ADMIN_USER COUCHDB_ADMIN_PASSWORD
+node <<'NODE'
+import { createEnv } from "@t3-oss/env-core";
+import { z } from "zod";
+
+const env = createEnv({
+  server: {
+    COUCHDB_CONNECT_HOST: z.string().default("127.0.0.1"),
+    COUCHDB_PORT: z.string().default("5984"),
+    COUCHDB_DB: z.string().default("spending"),
+    COUCHDB_ADMIN_USER: z.string().default("admin"),
+    COUCHDB_ADMIN_PASSWORD: z.string().default("admin"),
+  },
+  runtimeEnv: process.env,
+  emptyStringAsUndefined: true,
+});
+
+const bind = env.COUCHDB_CONNECT_HOST;
+const port = env.COUCHDB_PORT;
+const db = env.COUCHDB_DB;
+const adminUser = env.COUCHDB_ADMIN_USER;
+const adminPassword = env.COUCHDB_ADMIN_PASSWORD;
+
+const base = `http://${bind}:${port}`;
+
+async function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function waitUp() {
+  const url = `${base}/_up`;
+  for (let i = 0; i < 120; i++) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return;
+    } catch {
+      // ignore
+    }
+    await sleep(250);
+  }
+  throw new Error(`CouchDB did not become ready at ${url}`);
+}
+
+async function ensureDb() {
+  const url = `${base}/${encodeURIComponent(db)}?q=1&n=1`;
+  const auth = Buffer.from(`${adminUser}:${adminPassword}`, 'utf8').toString('base64');
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Basic ${auth}`,
+    },
+  });
+  if (res.status === 201 || res.status === 202 || res.status === 412) return;
+  const body = await res.text().catch(() => '');
+  throw new Error(`Failed to create DB '${db}' (HTTP ${res.status}): ${body}`);
+}
+
+async function ensureSystemDb(name) {
+  const url = `${base}/${encodeURIComponent(name)}?q=1&n=1`;
+  const auth = Buffer.from(`${adminUser}:${adminPassword}`, 'utf8').toString('base64');
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Basic ${auth}`,
+    },
+  });
+  if (res.status === 201 || res.status === 202 || res.status === 412) return;
+  const body = await res.text().catch(() => '');
+  throw new Error(`Failed to create system DB '${name}' (HTTP ${res.status}): ${body}`);
+}
+
+await waitUp();
+await ensureSystemDb('_users');
+await ensureSystemDb('_replicator');
+await ensureSystemDb('_global_changes');
+await ensureDb();
+NODE
+
+echo "CouchDB ready" >&2
+echo "- Base:   http://${COUCHDB_CONNECT_HOST}:${COUCHDB_PORT}" >&2
+echo "- Fauxton:http://${COUCHDB_CONNECT_HOST}:${COUCHDB_PORT}/_utils/" >&2
+echo "- DB URL: http://${COUCHDB_CONNECT_HOST}:${COUCHDB_PORT}/${COUCHDB_DB}" >&2
+echo "- Admin:  ${COUCHDB_ADMIN_USER} (set via COUCHDB_ADMIN_USER/COUCHDB_ADMIN_PASSWORD)" >&2
+echo "" >&2
+echo "Tip (Android emulator): use http://10.0.2.2:${COUCHDB_PORT}/${COUCHDB_DB}" >&2
+
+wait "${COUCHDB_PID}"

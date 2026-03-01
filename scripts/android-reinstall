@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+MODE="${1:-debug}"
+PKG_NAME="io.ionic.starter"
+
+"${ROOT_DIR}/scripts/require-emulator"
+
+DEVICE_ID="$("${ROOT_DIR}/scripts/emulator-device-id")"
+
+case "${MODE}" in
+  debug)
+    APK_PATH="${ROOT_DIR}/android/app/build/outputs/apk/debug/app-debug.apk"
+    ;;
+  release)
+    APK_PATH="${ROOT_DIR}/android/app/build/outputs/apk/release/app-release.apk"
+    ;;
+  *)
+    echo "Usage: android-reinstall [debug|release]" >&2
+    exit 2
+    ;;
+esac
+
+if [[ ! -f "${APK_PATH}" ]]; then
+  echo "APK not found: ${APK_PATH}" >&2
+  if [[ "${MODE}" == "debug" ]]; then
+    echo "Build it first: npm run build:debug" >&2
+  else
+    echo "Build it first: npm run build" >&2
+  fi
+  exit 1
+fi
+
+adb -s "${DEVICE_ID}" uninstall "${PKG_NAME}" >/dev/null 2>&1 || true
+adb -s "${DEVICE_ID}" install -r "${APK_PATH}"
