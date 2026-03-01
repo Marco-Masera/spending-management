@@ -4,21 +4,20 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "preview": "vite preview --port 4173 --strictPort",
-
-    "web:build": "vite build",
-
-    "android:build": "./android/gradlew -p android :app:assembleRelease",
-    "android:build:debug": "./android/gradlew -p android :app:assembleDebug",
-
     "build": "npm run web:build && npx cap sync android && npm run android:build",
     "build:debug": "npm run web:build && npx cap sync android && npm run android:build:debug",
-
-    "typecheck": "vue-tsc --noEmit",
-    "test:unit": "vitest run",
-    "lint": "eslint .",
+    "web:build": "vite build",
+    "web:dev": "vite",
+    "web:preview": "vite preview --port 4173 --strictPort",
+    "android:build": "./android/gradlew -p android :app:assembleRelease",
+    "android:build:debug": "./android/gradlew -p android :app:assembleDebug",
+    "checks": "npm run checks:types && npm run checks:lint",
+    "checks:types": "vue-tsc --noEmit",
+    "checks:lint": "eslint .",
+    "tests": "npm run tests:unit",
+    "tests:unit": "vitest run",
     "cap:sync": "cap sync",
+    "db:dev": "scripts/db-dev",
     "emulator:start": "scripts/emulator-start",
     "emulator:nuke": "scripts/emulator-nuke",
     "emulator:dev": "scripts/emulator-dev",
@@ -40,9 +39,15 @@
     "@ionic/storage": "^4.0.0",
     "@ionic/vue": "^8.7.17",
     "@ionic/vue-router": "^8.7.17",
+    "@t3-oss/env-core": "^0.13.10",
+    "cordova-sqlite-storage": "^7.0.0",
+    "events": "^3.3.0",
     "ionicons": "^8.0.13",
+    "pouchdb-adapter-cordova-sqlite": "^2.0.8",
+    "pouchdb-browser": "^9.0.0",
     "vue": "^3.5.28",
-    "vue-router": "^4.5.0"
+    "vue-router": "^4.5.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.1.0",
@@ -54,6 +59,7 @@
     "@vue/test-utils": "^2.4.6",
     "eslint": "^10.0.1",
     "eslint-plugin-vue": "^10.8.0",
+    "fake-indexeddb": "^6.2.2",
     "globals": "^17.3.0",
     "jsdom": "^28.1.0",
     "typescript": "^5.9.3",

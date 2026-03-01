@@ -6,6 +6,13 @@ SYS_IMG="system-images;android-35;default;x86_64"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+if ! command -v adb >/dev/null 2>&1; then
+  echo "adb not found in PATH" >&2
+  exit 1
+fi
+
+"${SCRIPT_DIR}/emulator-kill" || true
+
 "${SCRIPT_DIR}/emulator-nuke"
 
 if ! command -v emulator >/dev/null 2>&1; then

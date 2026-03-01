@@ -1,5 +1,6 @@
 import { afterEach, vi } from 'vitest'
 import { config } from '@vue/test-utils'
+import 'fake-indexeddb/auto'
 
 // Keep tests lightweight: stub Ionic components by tag name.
 // This avoids having to register the entire IonicVue plugin.

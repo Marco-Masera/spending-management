@@ -68,6 +68,7 @@
           packages = [
             pkgs.nodejs_22
             pkgs.android-tools
+            pkgs.couchdb3
             jdk
             androidSdk
           ];
@@ -94,6 +95,7 @@
           packages = [
             pkgs.nodejs_22
             pkgs.android-tools
+            pkgs.couchdb3
             pkgs.qemu_kvm
             pkgs.libGL
             pkgs.vulkan-loader

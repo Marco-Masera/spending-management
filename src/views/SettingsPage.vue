@@ -116,9 +116,44 @@
  <div class="middle" style = "margin-top: 24px;">
   <ion-button @click="export_data()" style="padding-left:10px; padding-right:10px">Export data</ion-button>
   <ion-button @click="import_data()" style="padding-left:10px; padding-right:10px">Import data</ion-button>
-</div>
+ </div>
 
- <div style="margin-bottom:100px"></div>
+ <div class="dividercontainer" style="margin-top: 18px;">
+       <ion-item-divider class="withtopborder">
+        <p class="weightened">
+        CouchDB sync
+        </p>
+      </ion-item-divider>
+ </div>
+
+ <div class="amountdiv" style="margin-top:14px; margin-bottom:12px">
+    <ion-item style="width:85%">
+      <ion-label position="floating">CouchDB URL:</ion-label>
+      <ion-input
+        type="text"
+        v-model="couchdbURL"
+        :placeholder="defaultCouchdbUrl || 'https://user:pass@host:5984/db'"
+      ></ion-input>
+    </ion-item>
+  </div>
+
+  <div class="middle" style="height:45px">
+    <ion-button @click="saveCouchdbURL">Save sync URL</ion-button>
+  </div>
+
+  <div class="dividercontainer" style="margin-top: 18px;">
+       <ion-item-divider class="withtopborder">
+        <p class="weightened">
+        Logs
+        </p>
+      </ion-item-divider>
+ </div>
+
+ <div class="middle" style="height:45px">
+   <ion-button @click="export_logs">Export logs</ion-button>
+ </div>
+
+   <div style="margin-bottom:100px"></div>
 
 
 <ion-popover :is-open="isAdding" :event="popoverEvent" @didDismiss="isAdding = false" style="--offset-y: -220px" >
@@ -144,6 +179,11 @@ import { alertController , IonIcon, IonChip, IonButtons, IonButton, IonPopover, 
 import { model } from '../data/model'
 import { defineComponent } from 'vue';
 import { closeCircle } from 'ionicons/icons';
+import { Capacitor } from '@capacitor/core'
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
+import { LOG_FILE_PATH } from '@/lib/logger'
+import { DEFAULT_COUCHDB_URL } from '@/data/modelDefaults'
 
 export default defineComponent({
   name: 'SettingsPage',
@@ -154,6 +194,8 @@ export default defineComponent({
   data() {
     return {
       currency: "",
+      couchdbURL: "",
+      defaultCouchdbUrl: DEFAULT_COUCHDB_URL,
       isfirst: false,
       categories: [''],
       colors: ["primary", "secondary", "tertiary", "success", "warning"],
@@ -214,13 +256,66 @@ export default defineComponent({
       model.set_default_value(this.$data.currency)
       this.presentToast("Currency updated")
     },
+    async saveCouchdbURL(){
+      try{
+        await model.set_couchdb_url(this.$data.couchdbURL)
+        this.presentToast("Sync URL updated")
+      } catch {
+        // Never error the user for sync failures.
+        this.presentToast("Sync URL updated")
+      }
+    },
+    async export_logs(){
+      if (Capacitor.getPlatform() !== 'android'){
+        this.presentToast('Export logs is only available on Android', 2500)
+        return
+      }
+
+      try {
+        // If the file doesn't exist yet, create it.
+        try {
+          await Filesystem.stat({ directory: Directory.Data, path: LOG_FILE_PATH })
+        } catch {
+          await Filesystem.mkdir({ directory: Directory.Data, path: 'logs', recursive: true })
+          await Filesystem.writeFile({
+            directory: Directory.Data,
+            path: LOG_FILE_PATH,
+            data: `${new Date().toISOString()} INFO [log] created via export\n`,
+            encoding: Encoding.UTF8,
+          })
+        }
+
+        const uriRes: any = await Filesystem.getUri({ directory: Directory.Data, path: LOG_FILE_PATH })
+        const uri = uriRes?.uri
+        if (!uri) throw new Error('missing log uri')
+
+        await Share.share({
+          title: 'app.log',
+          url: uri,
+          dialogTitle: 'Save log file',
+        })
+        this.presentToast('Log exported', 1500)
+      } catch {
+        this.presentToast('Could not export logs', 2500)
+      }
+    },
     onInputClick(nativeEl:any){
-      nativeEl.target.autofocus=true;
-      nativeEl.target.select();
+      const t = nativeEl?.target
+      if (!t) return
+      try {
+        t.autofocus = true
+      } catch {
+        // ignore
+      }
+      if (typeof t.select === 'function') {
+        t.select()
+      }
     },
     async init(){
       await model.init()
       this.$data.currency = model.get_default_value()
+      const savedUrl = model.get_couchdb_url ? model.get_couchdb_url() : ""
+      this.$data.couchdbURL = savedUrl || this.$data.defaultCouchdbUrl || ""
       this.$data.categories = model.get_categories()
       this.$data.budget = model.get_budget()
       if (this.$data.budget.type != 0){

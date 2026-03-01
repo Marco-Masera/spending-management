@@ -6,8 +6,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VITE_HOST="0.0.0.0"
 VITE_PORT="5173"
 
+COUCHDB_PORT="${COUCHDB_PORT:-5984}"
+
 # Android emulator uses this address to reach the host machine.
 CAP_LR_HOST="10.0.2.2"
+
+AVD_NAME="${SMT_EMULATOR_AVD_NAME:-spending_api35}"
+CAP_MAX_RETRIES="${SMT_CAP_MAX_RETRIES:-5}"
+CAP_RETRY_SLEEP_SECS="${SMT_CAP_RETRY_SLEEP_SECS:-5}"
 
 if ! command -v adb >/dev/null 2>&1; then
   echo "adb not found in PATH" >&2
@@ -30,7 +36,7 @@ trap cleanup EXIT
 echo "Starting emulator..." >&2
 "${ROOT_DIR}/scripts/emulator-start" >/tmp/spending-emulator.log 2>&1 &
 
-echo "Waiting for emulator '${SMT_EMULATOR_AVD_NAME:-spending_api35}' to connect via adb..." >&2
+echo "Waiting for emulator '${AVD_NAME}' to connect via adb..." >&2
 DEVICE_ID=""
 for _ in $(seq 1 180); do
   if DEVICE_ID="$("${ROOT_DIR}/scripts/emulator-device-id" 2>/dev/null)"; then
@@ -61,8 +67,22 @@ if ! adb -s "${DEVICE_ID}" shell getprop sys.boot_completed 2>/dev/null | tr -d 
   exit 1
 fi
 
+# Ensure basic adb shell responsiveness before invoking tooling that uses short timeouts.
+for _ in $(seq 1 60); do
+  if timeout 4s adb -s "${DEVICE_ID}" shell getprop >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+if ! timeout 4s adb -s "${DEVICE_ID}" shell getprop >/dev/null 2>&1; then
+  echo "adb shell is still unresponsive (timeout)" >&2
+  echo "Emulator log: /tmp/spending-emulator.log" >&2
+  exit 1
+fi
+
 echo "Starting Vite dev server on ${VITE_HOST}:${VITE_PORT}..." >&2
-(cd "${ROOT_DIR}" && npm run dev -- --host "${VITE_HOST}" --port "${VITE_PORT}" --strictPort) &
+(cd "${ROOT_DIR}" && npm run web:dev -- --mode emulator --host "${VITE_HOST}" --port "${VITE_PORT}" --strictPort) &
 VITE_PID=$!
 
 echo "Launching Capacitor run with live reload..." >&2
@@ -72,4 +92,77 @@ echo "- Live reload URL: http://${CAP_LR_HOST}:${VITE_PORT}" >&2
 adb -s "${DEVICE_ID}" uninstall io.ionic.starter >/dev/null 2>&1 || true
 
 cd "${ROOT_DIR}"
-exec npx cap run android -l --host "${CAP_LR_HOST}" --port "${VITE_PORT}" --forwardPorts "${VITE_PORT}:${VITE_PORT}" --target "${DEVICE_ID}"
+
+cap_run() {
+  local device_serial="$1"
+  ANDROID_SERIAL="${device_serial}" npx cap run android -l --host "${CAP_LR_HOST}" --port "${VITE_PORT}" --forwardPorts "${VITE_PORT}:${VITE_PORT}" --target "${AVD_NAME}"
+}
+
+is_retryable_cap_failure() {
+  local log_file="$1"
+  # Known intermittent failure when the emulator is slow and native-run times out.
+  if grep -q "ADBs is unresponsive" "${log_file}"; then
+    return 0
+  fi
+  if grep -q "device 'emulator-" "${log_file}" && grep -q "not found" "${log_file}"; then
+    return 0
+  fi
+  return 1
+}
+
+hard_cleanup() {
+  echo "Retry limit exceeded; cleaning up adb + emulator..." >&2
+  adb kill-server >/dev/null 2>&1 || true
+  "${ROOT_DIR}/scripts/emulator-kill" >/dev/null 2>&1 || true
+}
+
+attempt=1
+while true; do
+  CAP_LOG="/tmp/spending-cap-run-attempt-${attempt}.log"
+  echo "Capacitor run attempt ${attempt}/${CAP_MAX_RETRIES}..." >&2
+
+  set +e
+  cap_run "${DEVICE_ID}" 2>&1 | tee "${CAP_LOG}"
+  cap_status=${PIPESTATUS[0]}
+  set -e
+
+  if [[ "${cap_status}" -eq 0 ]]; then
+    exit 0
+  fi
+
+  if [[ "${attempt}" -ge "${CAP_MAX_RETRIES}" ]]; then
+    hard_cleanup
+    echo "Capacitor run failed after ${attempt} attempts." >&2
+    echo "Emulator log: /tmp/spending-emulator.log" >&2
+    echo "Last cap log: ${CAP_LOG}" >&2
+    exit "${cap_status}"
+  fi
+
+  if ! is_retryable_cap_failure "${CAP_LOG}"; then
+    echo "Capacitor run failed with a non-retryable error." >&2
+    echo "Cap log: ${CAP_LOG}" >&2
+    exit "${cap_status}"
+  fi
+
+  echo "Retryable adb/emulator failure; restarting adb and retrying in ${CAP_RETRY_SLEEP_SECS}s..." >&2
+  adb kill-server >/dev/null 2>&1 || true
+  adb start-server >/dev/null 2>&1 || true
+  sleep "${CAP_RETRY_SLEEP_SECS}"
+
+  # Re-resolve device id in case the emulator reconnects with a different serial.
+  for _ in $(seq 1 60); do
+    if DEVICE_ID="$("${ROOT_DIR}/scripts/emulator-device-id" 2>/dev/null)"; then
+      break
+    fi
+    sleep 1
+  done
+
+  if [[ -z "${DEVICE_ID}" ]]; then
+    echo "Emulator not detected via adb after retry (timeout)" >&2
+    hard_cleanup
+    exit "${cap_status}"
+  fi
+
+  adb -s "${DEVICE_ID}" wait-for-device
+  attempt=$((attempt + 1))
+done

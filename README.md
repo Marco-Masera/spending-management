@@ -9,65 +9,66 @@ Available on Play Store too: https://play.google.com/store/apps/details?id=mmase
 This repo uses a Nix flake for consistent tool versions.
 
 ```bash
+####
 # Enter the dev shell once, then use npm scripts.
+####
 nix develop
 
-# Web dev
-npm run dev
-
-# Quality checks
-npm run lint
-npm run typecheck
-npm run test:unit
-
-# Web build only
-npm run web:build
-```
-
-## Android
-
-```bash
-# From inside `nix develop` (or `nix develop .#emulator`):
-
-# Build (web + Android)
+####
+# Both android & web
+####
 npm run build
-
-# Build debug (web + Android)
 npm run build:debug
-```
 
-## Android Emulator
+####
+# Checks
+####
+npm run checks # runs typecheck & lint
+npm run checks:lint
+npm run checks:types
+npm run tests # all tests 
+npm run tests:unit # only unit tests
 
-The Android emulator is available via a separate, heavier Nix dev shell that
-includes the emulator binaries, system images, and Android Studio.
 
-Prerequisites (host)
+####
+# Web only
+####
+npm run web:dev
+npm run web:build
 
-- Hardware virtualization enabled in BIOS/UEFI
-- KVM available and accessible (`/dev/kvm` exists and is writable by your user)
+####
+# Android only
+####
+npm run android:build
+npm run android:build:debug
 
-```bash
-# Enter the emulator dev shell (includes emulator + system images + Android Studio)
+
+####
+# Emulator.
+####
+# Prerequisites (host)
+# - Hardware virtualization enabled in BIOS/UEFI
+# - KVM available and accessible (`/dev/kvm` exists and is writable by your user)
+
+# Requires entering emulator shell
 nix develop .#emulator
 
-# The AVD name comes from the Nix flake env var:
-echo "SMT_EMULATOR_AVD_NAME=$SMT_EMULATOR_AVD_NAME"
 
-# Start a clean emulator (this nukes and recreates the AVD first)
-npm run emulator:start
+# commands
+npm run emulator:dev # starts dev emulator with live reloading!
 
-# One-command live reload dev flow (starts emulator + Vite + cap run -l)
-npm run emulator:dev
+npm run emulator:start # start emulator
+npm run emulator:app:run # runs app in emulator
+npm run emulator:logcat # logs
+npm run emulator:nuke # nuke emulator
+android-studio # open android studio
 
-# Build + (re)install debug + launch (no live reload)
-npm run emulator:app:run
+####
+# Other useful stuff
+####
 
-# Tail logs
-npm run emulator:logcat
-
-# Optional: delete the AVD (start will recreate it)
-npm run emulator:nuke
-
-# Optional: open Android Studio (Device Manager, logcat UI, etc)
-android-studio
+# To view the browser console from the app in the emulator go to chrome on your computer and visit this page:
+chrome://inspect/#devices
+#
 ```
+

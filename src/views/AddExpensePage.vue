@@ -86,7 +86,7 @@
 
 <script lang="ts">
 import { useRouter } from 'vue-router';
-import { IonIcon,IonPopover, IonChip, IonButton, IonButtons, IonContent,IonBackButton, toastController, IonInput , IonHeader, IonPage, IonItem, IonLabel, IonItemDivider, IonTitle, IonToolbar } from '@ionic/vue';
+import { IonFab, IonFabButton, IonIcon,IonPopover, IonChip, IonButton, IonButtons, IonContent,IonBackButton, toastController, IonInput , IonHeader, IonPage, IonItem, IonLabel, IonItemDivider, IonTitle, IonToolbar } from '@ionic/vue';
 import { model } from '../data/model'
 import { add } from 'ionicons/icons';
 import { defineComponent } from 'vue';
@@ -121,8 +121,16 @@ export default defineComponent({
       this.$data.isAdding = true
     },
     onInputClick(nativeEl:any){
-      nativeEl.target.autofocus=true;
-      nativeEl.target.select();
+      const t = nativeEl?.target
+      if (!t) return
+      try {
+        t.autofocus = true
+      } catch {
+        // ignore
+      }
+      if (typeof t.select === 'function') {
+        t.select()
+      }
     },
     async init(){
       await model.init()
@@ -155,6 +163,8 @@ export default defineComponent({
   components: {
     IonBackButton,
     IonContent,
+    IonFab,
+    IonFabButton,
     IonInput,
     IonHeader,
     IonPage,

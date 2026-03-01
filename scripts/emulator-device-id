@@ -8,7 +8,7 @@ if ! command -v adb >/dev/null 2>&1; then
   exit 1
 fi
 
-mapfile -t EMULATOR_SERIALS < <(adb devices | awk 'NR>1 && $1 ~ /^emulator-/ {print $1}')
+mapfile -t EMULATOR_SERIALS < <(adb devices | awk 'NR>1 && $1 ~ /^emulator-/ && $2 == "device" {print $1}')
 if [[ "${#EMULATOR_SERIALS[@]}" -eq 0 ]]; then
   echo "No running emulator detected (adb devices shows none)." >&2
   exit 1
