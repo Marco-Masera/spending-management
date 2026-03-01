@@ -15,6 +15,27 @@ This repo uses a Nix flake for consistent tool versions.
 nix develop
 
 ####
+# CouchDB (local dev)
+####
+
+# Start CouchDB (creates the DB if missing)
+npm run db:dev
+
+# CouchDB URLs to paste into the in-app Settings:
+# - Web (host browser):    http://admin:admin@127.0.0.1:5984/spending
+# - Android emulator only: http://admin:admin@10.0.2.2:5984/spending
+#
+# CouchDB requires an admin user; db:dev sets one by default:
+# - COUCHDB_ADMIN_USER=admin
+# - COUCHDB_ADMIN_PASSWORD=admin
+
+# Local CouchDB data lives under .couchdb/ (ignored by git)
+
+# Default CouchDB URL (dev)
+# - Web dev defaults to http://admin:admin@127.0.0.1:5984/spending via .env
+# - Emulator dev defaults to http://admin:admin@10.0.2.2:5984/spending via .env.emulator (vite --mode emulator)
+
+####
 # Both android & web
 ####
 npm run build
