@@ -41,6 +41,17 @@ export interface SingleExpense {
   category: string;
 }
 
+export type RecurringFrequency = "monthly" | "yearly";
+
+export interface AddRecurringExpenseInput {
+  amount: number;
+  category: string;
+  frequency: RecurringFrequency;
+  startDate?: Date | string | number;
+  endDate?: Date | string | number;
+  interval?: number;
+}
+
 export interface HomePageLocalizer {
   x: string;
 }
@@ -85,6 +96,32 @@ type ExpenseDoc = {
   category: string;
 };
 
+type RecurringExpenseDoc = {
+  _id: string; // rexp_<rand>
+  type: "recurring_expense";
+  cost: number;
+  category: string;
+  startTs: number;
+  endTs?: number;
+  frequency: RecurringFrequency;
+  interval: number;
+  dayOfMonth: number;
+  monthOfYear?: number;
+  active: boolean;
+};
+
+type RecurringSkipDoc = {
+  _id: string; // rskip_<encoded-series-id>_<13-digit-ts>
+  type: "recurring_skip";
+  recurringId: string;
+  occurrenceTs: number;
+};
+
+type ExpenseListDoc = ExpenseDoc & {
+  recurringId?: string;
+  generated?: boolean;
+};
+
 function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
@@ -109,6 +146,36 @@ function makeExpenseId(ts: number): string {
   return `exp_${padTs(ts)}_${r}`;
 }
 
+function makeRecurringExpenseId(): string {
+  const r = Math.random().toString(16).slice(2, 10);
+  return `rexp_${r}`;
+}
+
+function makeRecurringOccurrenceId(recurringId: string, ts: number): string {
+  return `recur_occ_${encodeURIComponent(recurringId)}_${padTs(ts)}`;
+}
+
+function recurringSkipId(recurringId: string, ts: number): string {
+  return `rskip_${encodeURIComponent(recurringId)}_${padTs(ts)}`;
+}
+
+function parseRecurringOccurrenceId(id: string):
+  | { recurringId: string; occurrenceTs: number }
+  | undefined {
+  const m = /^recur_occ_(.+)_(\d{13})$/.exec(String(id || ""));
+  if (!m) return undefined;
+  const occurrenceTs = Number(m[2]);
+  if (!Number.isFinite(occurrenceTs)) return undefined;
+  try {
+    return {
+      recurringId: decodeURIComponent(m[1]),
+      occurrenceTs,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 function ym(month: number, year: number): number {
   return year * 100 + (month + 1);
 }
@@ -119,6 +186,172 @@ function monthId(month: number, year: number): string {
 
 function categoryId(name: string): string {
   return `cat_${encodeURIComponent(name)}`;
+}
+
+function asValidDate(input: Date | string | number | undefined): Date | undefined {
+  if (input === undefined) return undefined;
+  const d = input instanceof Date ? new Date(input.getTime()) : new Date(input);
+  if (!Number.isFinite(d.getTime())) return undefined;
+  return d;
+}
+
+function makeOccurrenceDate(
+  year: number,
+  month: number,
+  dayOfMonth: number,
+  anchor: Date,
+): Date {
+  const day = Math.min(dayOfMonth, getDaysInMonth(month, year));
+  return new Date(
+    year,
+    month,
+    day,
+    anchor.getHours(),
+    anchor.getMinutes(),
+    anchor.getSeconds(),
+    anchor.getMilliseconds(),
+  );
+}
+
+function normalizeRecurringEndTs(
+  input: Date | string | number | undefined,
+  anchor: Date,
+): number | undefined {
+  const d = asValidDate(input);
+  if (!d) return undefined;
+  return makeOccurrenceDate(
+    d.getFullYear(),
+    d.getMonth(),
+    d.getDate(),
+    anchor,
+  ).getTime();
+}
+
+function monthIndex(year: number, month: number): number {
+  return year * 12 + month;
+}
+
+function skipKey(recurringId: string, ts: number): string {
+  return `${recurringId}:${ts}`;
+}
+
+function generateRecurringExpenseOccurrences(
+  doc: RecurringExpenseDoc,
+  startTs: number,
+  endTs: number,
+  skipped: Set<string>,
+): ExpenseListDoc[] {
+  if (!doc.active) return [];
+  if (!Number.isFinite(doc.startTs) || doc.startTs >= endTs) return [];
+  if (doc.endTs !== undefined && doc.endTs < startTs) return [];
+
+  const out: ExpenseListDoc[] = [];
+  const anchor = new Date(doc.startTs);
+  const interval = Math.max(1, Math.floor(doc.interval || 1));
+
+  if (doc.frequency === "monthly") {
+    const firstMonth = monthIndex(anchor.getFullYear(), anchor.getMonth());
+    const rangeMonthStart = monthIndex(
+      new Date(startTs).getFullYear(),
+      new Date(startTs).getMonth(),
+    );
+    let cursorMonth = firstMonth;
+    if (rangeMonthStart > firstMonth) {
+      const delta = rangeMonthStart - firstMonth;
+      cursorMonth = firstMonth + Math.floor(delta / interval) * interval;
+      while (cursorMonth > firstMonth) {
+        const prevMonth = cursorMonth - interval;
+        const prevYear = Math.floor(prevMonth / 12);
+        const prevMonthOfYear = prevMonth % 12;
+        const prevTs = makeOccurrenceDate(
+          prevYear,
+          prevMonthOfYear,
+          doc.dayOfMonth,
+          anchor,
+        ).getTime();
+        if (prevTs < startTs) break;
+        cursorMonth = prevMonth;
+      }
+    }
+
+    for (;;) {
+      const year = Math.floor(cursorMonth / 12);
+      const month = cursorMonth % 12;
+      const occurrenceTs = makeOccurrenceDate(
+        year,
+        month,
+        doc.dayOfMonth,
+        anchor,
+      ).getTime();
+      if (occurrenceTs >= endTs) break;
+      if (doc.endTs !== undefined && occurrenceTs > doc.endTs) break;
+      if (
+        occurrenceTs >= startTs &&
+        occurrenceTs >= doc.startTs &&
+        !skipped.has(skipKey(doc._id, occurrenceTs))
+      ) {
+        out.push({
+          _id: makeRecurringOccurrenceId(doc._id, occurrenceTs),
+          type: "expense",
+          ts: occurrenceTs,
+          cost: Number(doc.cost),
+          category: doc.category,
+          recurringId: doc._id,
+          generated: true,
+        });
+      }
+      cursorMonth += interval;
+    }
+  }
+
+  if (doc.frequency === "yearly") {
+    const startYear = anchor.getFullYear();
+    const rangeStartDate = new Date(startTs);
+    let year = startYear;
+    if (rangeStartDate.getFullYear() > startYear) {
+      const delta = rangeStartDate.getFullYear() - startYear;
+      year = startYear + Math.floor(delta / interval) * interval;
+      while (year > startYear) {
+        const prevTs = makeOccurrenceDate(
+          year - interval,
+          doc.monthOfYear ?? anchor.getMonth(),
+          doc.dayOfMonth,
+          anchor,
+        ).getTime();
+        if (prevTs < startTs) break;
+        year -= interval;
+      }
+    }
+
+    for (;;) {
+      const occurrenceTs = makeOccurrenceDate(
+        year,
+        doc.monthOfYear ?? anchor.getMonth(),
+        doc.dayOfMonth,
+        anchor,
+      ).getTime();
+      if (occurrenceTs >= endTs) break;
+      if (doc.endTs !== undefined && occurrenceTs > doc.endTs) break;
+      if (
+        occurrenceTs >= startTs &&
+        occurrenceTs >= doc.startTs &&
+        !skipped.has(skipKey(doc._id, occurrenceTs))
+      ) {
+        out.push({
+          _id: makeRecurringOccurrenceId(doc._id, occurrenceTs),
+          type: "expense",
+          ts: occurrenceTs,
+          cost: Number(doc.cost),
+          category: doc.category,
+          recurringId: doc._id,
+          generated: true,
+        });
+      }
+      year += interval;
+    }
+  }
+
+  return out;
 }
 
 type LegacySpendingItem = {
@@ -451,8 +684,15 @@ export function createModel(defaultDbName = "spending-management") {
             budget: { ...DEFAULT_BUDGET },
             lastUpdate: currentVersion,
           };
-          await this.db.put(settings);
-          this.settings = settings;
+          try {
+            await this.db.put(settings);
+            this.settings = settings;
+          } catch (e: any) {
+            if (!(e && e.status === 409)) throw e;
+            const current = await safeGet<SettingsDoc>(this.db, "settings");
+            if (!current) throw e;
+            this.settings = current;
+          }
 
           for (const name of DEFAULT_CATEGORIES) {
             const d: CategoryDoc = {
@@ -677,6 +917,87 @@ export function createModel(defaultDbName = "spending-management") {
       return docs;
     },
 
+    async getRecurringExpenseDocs(): Promise<RecurringExpenseDoc[]> {
+      await this.ensureInit();
+      const res = await this.db!.allDocs({
+        include_docs: true,
+        startkey: "rexp_",
+        endkey: "rexp_\uffff",
+      });
+
+      const docs: RecurringExpenseDoc[] = [];
+      for (const row of res.rows) {
+        const d: any = row.doc;
+        if (!d || d.type !== "recurring_expense") continue;
+        docs.push(d as RecurringExpenseDoc);
+      }
+      return docs;
+    },
+
+    async getRecurringSkipSetInRange(
+      startTs: number,
+      endTs: number,
+    ): Promise<Set<string>> {
+      await this.ensureInit();
+      const res = await this.db!.allDocs({
+        include_docs: true,
+        startkey: "rskip_",
+        endkey: "rskip_\uffff",
+      });
+
+      const skipped = new Set<string>();
+      for (const row of res.rows) {
+        const d: any = row.doc;
+        if (!d || d.type !== "recurring_skip") continue;
+        if (typeof d.occurrenceTs !== "number") continue;
+        if (d.occurrenceTs < startTs || d.occurrenceTs >= endTs) continue;
+        skipped.add(skipKey(String(d.recurringId), d.occurrenceTs));
+      }
+      return skipped;
+    },
+
+    async getRecurringSkipDocs(recurringId: string): Promise<RecurringSkipDoc[]> {
+      await this.ensureInit();
+      const encodedId = encodeURIComponent(String(recurringId));
+      const res = await this.db!.allDocs({
+        include_docs: true,
+        startkey: `rskip_${encodedId}_`,
+        endkey: `rskip_${encodedId}_\uffff`,
+      });
+
+      const docs: RecurringSkipDoc[] = [];
+      for (const row of res.rows) {
+        const d: any = row.doc;
+        if (!d || d.type !== "recurring_skip") continue;
+        if (d.recurringId !== recurringId) continue;
+        docs.push(d as RecurringSkipDoc);
+      }
+      return docs;
+    },
+
+    async getAllExpenseDocsInRange(
+      startTs: number,
+      endTs: number,
+    ): Promise<ExpenseListDoc[]> {
+      const docs = (await this.getExpenseDocsInRange(startTs, endTs)) as ExpenseListDoc[];
+      const recurringDocs = await this.getRecurringExpenseDocs();
+      if (recurringDocs.length === 0) return docs;
+
+      const skipped = await this.getRecurringSkipSetInRange(startTs, endTs);
+      for (const recurring of recurringDocs) {
+        const generated = generateRecurringExpenseOccurrences(
+          recurring,
+          startTs,
+          endTs,
+          skipped,
+        );
+        docs.push(...generated);
+      }
+
+      docs.sort((a, b) => a.ts - b.ts);
+      return docs;
+    },
+
     // UI helpers
     get_empty_expense(): Expense {
       return {
@@ -816,6 +1137,70 @@ export function createModel(defaultDbName = "spending-management") {
       await this.db!.put(doc);
     },
 
+    async add_recurring_expense(
+      input: AddRecurringExpenseInput,
+    ): Promise<boolean> {
+      await this.ensureInit();
+
+      const category = String(input?.category || "").trim();
+      const frequency = input?.frequency;
+      const amount = Number(input?.amount);
+      const interval = Math.max(1, Math.floor(Number(input?.interval ?? 1)));
+      const startDate =
+        asValidDate(input?.startDate) ?? new Date(Date.now());
+      const endTs = normalizeRecurringEndTs(input?.endDate, startDate);
+
+      if (!category) return false;
+      if (!Number.isFinite(amount)) return false;
+      if (frequency !== "monthly" && frequency !== "yearly") return false;
+      if (input?.endDate !== undefined && endTs === undefined) return false;
+      if (endTs !== undefined && endTs < startDate.getTime()) return false;
+
+      const doc: RecurringExpenseDoc = {
+        _id: makeRecurringExpenseId(),
+        type: "recurring_expense",
+        cost: round2(amount),
+        category,
+        startTs: startDate.getTime(),
+        endTs,
+        frequency,
+        interval,
+        dayOfMonth: startDate.getDate(),
+        monthOfYear: frequency === "yearly" ? startDate.getMonth() : undefined,
+        active: true,
+      };
+
+      this.weekly_exp = undefined;
+      this.monthly_exp = undefined;
+      await this.db!.put(doc);
+      return true;
+    },
+
+    async remove_recurring_expense(recurringId: string): Promise<boolean> {
+      await this.ensureInit();
+      const id = String(recurringId || "").trim();
+      if (!id) return false;
+
+      this.weekly_exp = undefined;
+      this.monthly_exp = undefined;
+
+      const recurringDoc = await safeGet<any>(this.db!, id);
+      if (!recurringDoc || recurringDoc.type !== "recurring_expense") return false;
+
+      const skipDocs = await this.getRecurringSkipDocs(id);
+      if (skipDocs.length > 0) {
+        await this.db!.bulkDocs(
+          skipDocs.map((doc) => ({
+            ...doc,
+            _deleted: true,
+          })),
+        );
+      }
+
+      await this.db!.remove(recurringDoc);
+      return true;
+    },
+
     async remove_expense(expense: SingleExpense) {
       await this.ensureInit();
       this.weekly_exp = undefined;
@@ -824,6 +1209,18 @@ export function createModel(defaultDbName = "spending-management") {
       const anyExp: any = expense as any;
       const id =
         anyExp && typeof anyExp._id === "string" ? anyExp._id : undefined;
+      if (id && id.startsWith("recur_occ_")) {
+        const parsed = parseRecurringOccurrenceId(id);
+        if (!parsed) return;
+        const skipDoc: RecurringSkipDoc = {
+          _id: recurringSkipId(parsed.recurringId, parsed.occurrenceTs),
+          type: "recurring_skip",
+          recurringId: parsed.recurringId,
+          occurrenceTs: parsed.occurrenceTs,
+        };
+        await putIfMissing(this.db!, skipDoc);
+        return;
+      }
       if (id && id.startsWith("exp_")) {
         const d = await safeGet<any>(this.db!, id);
         if (d) {
@@ -871,7 +1268,7 @@ export function createModel(defaultDbName = "spending-management") {
       await this.ensureMonthDoc(month, year);
       const start = new Date(year, month, 1).getTime();
       const end = new Date(year, month + 1, 1).getTime();
-      const docs = await this.getExpenseDocsInRange(start, end);
+      const docs = await this.getAllExpenseDocsInRange(start, end);
 
       const out: any[] = docs.map((d) => ({
         _id: d._id,
@@ -930,7 +1327,7 @@ export function createModel(defaultDbName = "spending-management") {
 
       const start = new Date(year, month, 1).getTime();
       const end = new Date(year, month + 1, 1).getTime();
-      const docs = await this.getExpenseDocsInRange(start, end);
+      const docs = await this.getAllExpenseDocsInRange(start, end);
       const tot = docs.reduce((s, d) => s + Number(d.cost), 0);
 
       if (isCurrent) {
@@ -974,7 +1371,7 @@ export function createModel(defaultDbName = "spending-management") {
       const startTs = startOfWeek.getTime();
       const endTs = now.getTime() + 1;
 
-      const docs = await this.getExpenseDocsInRange(startTs, endTs);
+      const docs = await this.getAllExpenseDocsInRange(startTs, endTs);
       const weekSpending = docs.reduce((s, d) => s + Number(d.cost), 0);
 
       const exp: Expense = {
@@ -1015,7 +1412,7 @@ export function createModel(defaultDbName = "spending-management") {
         now.getMonth() + 1,
         1,
       ).getTime();
-      const docs = await this.getExpenseDocsInRange(rangeStart, rangeEnd);
+      const docs = await this.getAllExpenseDocsInRange(rangeStart, rangeEnd);
 
       const totals: Record<string, number> = {};
       for (const d of docs) {

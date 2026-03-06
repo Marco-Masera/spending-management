@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createModel } from '@/data/model'
-import { DEFAULT_CATEGORIES } from '@/data/modelDefaults'
+import { DEFAULT_CATEGORIES, DEFAULT_COUCHDB_URL } from '@/data/modelDefaults'
 
 function monthId(month0: number, year: number) {
   const ym = year * 100 + (month0 + 1)
@@ -19,7 +19,7 @@ describe('pouchdb-backed model', () => {
     expect(first).toBe(false)
     expect(m.get_default_value()).toBe('€')
     expect(m.get_budget()).toEqual({ type: 0, budget: 0 })
-    expect(m.get_couchdb_url()).toBe('')
+    expect(m.get_couchdb_url()).toBe(DEFAULT_COUCHDB_URL)
     expect(m.get_categories().length).toBeGreaterThan(0)
 
     await m.__test_destroy_db()
@@ -54,6 +54,148 @@ describe('pouchdb-backed model', () => {
     await m.remove_expense(all[0])
     const exp2 = await m.get_monthly_expense()
     expect(Number(exp2.total_sum)).toBeCloseTo(expectedRemaining, 2)
+
+    await m.__test_destroy_db()
+  })
+
+  it('includes monthly recurring expenses in monthly totals and category totals', async () => {
+    const now = new Date(2026, 1, 10, 12, 0, 0).getTime() // Feb 10, 2026
+    vi.spyOn(Date, 'now').mockReturnValue(now)
+
+    const m: any = createModel(`test-recurring-monthly-${Date.now()}-${Math.random()}`)
+    await m.init({ platform: 'web' })
+
+    const created = await m.add_recurring_expense({
+      amount: 12.5,
+      category: 'Subscriptions 🖥',
+      frequency: 'monthly',
+      startDate: new Date(2026, 0, 5, 9, 30, 0),
+    })
+
+    expect(created).toBe(true)
+
+    await m.add_expense(2.5, 'Subscriptions 🖥')
+
+    const all = await m.get_all_month_expenses(1, 2026)
+    expect(all).toHaveLength(2)
+    expect((all[0] as any)._id).toMatch(/^recur_occ_/)
+    expect(all[0].date.getDate()).toBe(5)
+
+    const monthly = await m.get_monthly_expense(1, 2026)
+    expect(monthly.total_sum).toBe('15.00')
+
+    const categories = await m.get_expenses_by_category(1, 2026)
+    expect(categories).toEqual([['Subscriptions 🖥', '15.00']])
+
+    await m.__test_destroy_db()
+  })
+
+  it('supports deleting a generated recurring occurrence and respects the recurring end date', async () => {
+    const m: any = createModel(`test-recurring-skip-${Date.now()}-${Math.random()}`)
+    await m.init({ platform: 'web' })
+
+    const created = await m.add_recurring_expense({
+      amount: 30,
+      category: 'Bills 📄',
+      frequency: 'monthly',
+      startDate: new Date(2026, 0, 15, 8, 0, 0),
+      endDate: new Date(2026, 2, 15),
+    })
+
+    expect(created).toBe(true)
+
+    const january = await m.get_all_month_expenses(0, 2026)
+    expect(january).toHaveLength(1)
+    expect((january[0] as any)._id).toMatch(/^recur_occ_/)
+
+    await m.remove_expense(january[0])
+
+    const januaryAfterDelete = await m.get_all_month_expenses(0, 2026)
+    expect(januaryAfterDelete).toHaveLength(0)
+
+    const february = await m.get_all_month_expenses(1, 2026)
+    expect(february).toHaveLength(1)
+    expect(february[0].cost).toBe('30.00')
+
+    const march = await m.get_all_month_expenses(2, 2026)
+    expect(march).toHaveLength(1)
+
+    const april = await m.get_all_month_expenses(3, 2026)
+    expect(april).toHaveLength(0)
+
+    await m.__test_destroy_db()
+  })
+
+  it('supports yearly recurring expenses out of the box', async () => {
+    const m: any = createModel(`test-recurring-yearly-${Date.now()}-${Math.random()}`)
+    await m.init({ platform: 'web' })
+
+    const created = await m.add_recurring_expense({
+      amount: 250,
+      category: 'Travel 🚞',
+      frequency: 'yearly',
+      startDate: new Date(2024, 6, 4, 7, 45, 0),
+      endDate: new Date(2027, 6, 4),
+    })
+
+    expect(created).toBe(true)
+
+    const july2026 = await m.get_all_month_expenses(6, 2026)
+    expect(july2026).toHaveLength(1)
+    expect(july2026[0].cost).toBe('250.00')
+    expect(july2026[0].date.getFullYear()).toBe(2026)
+    expect(july2026[0].date.getMonth()).toBe(6)
+    expect(july2026[0].date.getDate()).toBe(4)
+
+    const june2026 = await m.get_all_month_expenses(5, 2026)
+    expect(june2026).toHaveLength(0)
+
+    const july2028 = await m.get_all_month_expenses(6, 2028)
+    expect(july2028).toHaveLength(0)
+
+    await m.__test_destroy_db()
+  })
+
+  it('deletes a recurring expense and cleans up its skip tombstones', async () => {
+    const m: any = createModel(`test-recurring-delete-${Date.now()}-${Math.random()}`)
+    await m.init({ platform: 'web' })
+
+    const created = await m.add_recurring_expense({
+      amount: 45,
+      category: 'Insurance',
+      frequency: 'monthly',
+      startDate: new Date(2026, 0, 20, 10, 0, 0),
+      endDate: new Date(2026, 5, 20),
+    })
+
+    expect(created).toBe(true)
+
+    const recurringDocs = await m.getRecurringExpenseDocs()
+    expect(recurringDocs).toHaveLength(1)
+    const recurringId = recurringDocs[0]._id
+
+    const january = await m.get_all_month_expenses(0, 2026)
+    expect(january).toHaveLength(1)
+
+    await m.remove_expense(january[0])
+
+    const skipsBeforeDelete = await m.getRecurringSkipDocs(recurringId)
+    expect(skipsBeforeDelete).toHaveLength(1)
+
+    const removed = await m.remove_recurring_expense(recurringId)
+    expect(removed).toBe(true)
+
+    const recurringAfterDelete = await m.getRecurringExpenseDocs()
+    expect(recurringAfterDelete).toHaveLength(0)
+
+    const skipsAfterDelete = await m.getRecurringSkipDocs(recurringId)
+    expect(skipsAfterDelete).toHaveLength(0)
+
+    const januaryAfterDelete = await m.get_all_month_expenses(0, 2026)
+    expect(januaryAfterDelete).toHaveLength(0)
+
+    const februaryAfterDelete = await m.get_all_month_expenses(1, 2026)
+    expect(februaryAfterDelete).toHaveLength(0)
 
     await m.__test_destroy_db()
   })
@@ -111,14 +253,17 @@ describe('pouchdb-backed model', () => {
     vi.spyOn(Date, 'now').mockReturnValue(now)
 
     const m: any = createModel(`test-clear-${Date.now()}-${Math.random()}`)
+    m._restartSync = vi.fn(async () => {})
     await m.init({ platform: 'web' })
 
     m.set_default_value('$')
+    await new Promise((resolve) => setTimeout(resolve, 0))
     await m.set_budget(0, 123)
     expect(m.get_default_value()).toBe('$')
     expect(m.get_budget()).toEqual({ type: 0, budget: 123 })
 
     m.add_category('Custom')
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(m.get_categories()).toContain('Custom')
     await m.add_expense(10, 'Custom')
     const before = await m.get_all_month_expenses()
