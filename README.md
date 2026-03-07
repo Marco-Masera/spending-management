@@ -56,6 +56,14 @@ npm run web:build
 npm run android:build
 npm run android:build:debug
 
+# Install on a physical Android device over USB (pass adb serial after `--`)
+adb devices
+npm run android:install -- <device-id>
+npm run android:install:debug -- <device-id>
+
+# `android:install` builds the release variant for local sideloading and signs it with the debug keystore.
+# Use your proper release signing setup for Play Store / distribution builds.
+
 
 ####
 # Emulator.
@@ -85,4 +93,3 @@ android-studio # open android studio
 chrome://inspect/#devices
 #
 ```
-

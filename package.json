@@ -11,6 +11,8 @@
     "web:preview": "vite preview --port 4173 --strictPort",
     "android:build": "./android/gradlew -p android :app:assembleRelease",
     "android:build:debug": "./android/gradlew -p android :app:assembleDebug",
+    "android:install": "npm run build && bash scripts/android-install release",
+    "android:install:debug": "npm run build:debug && bash scripts/android-install debug",
     "checks": "npm run checks:types && npm run checks:lint",
     "checks:types": "vue-tsc --noEmit",
     "checks:lint": "eslint .",
