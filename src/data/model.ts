@@ -11,7 +11,6 @@ import {
   BudgetType,
   DEFAULT_BUDGET,
   DEFAULT_CATEGORIES,
-  DEFAULT_COUCHDB_URL,
   DEFAULT_CURRENCY,
   DEFAULT_LANGUAGE,
   MODEL_SCHEMA_VERSION,
@@ -80,6 +79,17 @@ export interface ExpenseWithDate {
   year: number;
 }
 
+export type SyncStatusState =
+  | "not_configured"
+  | "connecting"
+  | "ok"
+  | "error";
+
+export interface SyncStatus {
+  state: SyncStatusState;
+  error: string;
+}
+
 type SettingsDoc = {
   _id: "settings";
   type: "settings";
@@ -143,9 +153,48 @@ function round2(n: number) {
 }
 
 function normalizeCouchdbUrl(input: unknown): string {
-  const trimmed = String(input ?? "").trim();
-  if (trimmed) return trimmed;
-  return String(DEFAULT_COUCHDB_URL ?? "").trim();
+  return String(input ?? "").trim();
+}
+
+function getSyncAuthHint(err: any): string | undefined {
+  const st = err?.status;
+  if (st === 401 || st === 403) {
+    return "CouchDB requires auth; try https://user:pass@host:5984/db or adjust CouchDB security.";
+  }
+  return undefined;
+}
+
+function getSyncErrorMessage(err: any): string {
+  const authHint = getSyncAuthHint(err);
+  if (authHint) return authHint;
+
+  const message = String(err?.message ?? "").trim();
+  if (message) return message;
+
+  const name = String(err?.name ?? "").trim();
+  if (name) return name;
+
+  const status = Number(err?.status);
+  if (Number.isFinite(status) && status > 0) {
+    return `Sync failed (${status})`;
+  }
+
+  return "Could not connect to CouchDB.";
+}
+
+async function probeSyncUrl(url: string) {
+  const remote = new PouchDB(url);
+  try {
+    await remote.info();
+  } finally {
+    try {
+      if (typeof (remote as any).close === "function") {
+        await (remote as any).close();
+      }
+    } catch {
+      // ignore cleanup failures
+    }
+  }
 }
 
 function getDaysInMonth(month: number, year: number) {
@@ -767,6 +816,9 @@ export function createModel(defaultDbName = "spending-management") {
     _hooksSetup: false,
     _syncWanted: false,
     _syncUrl: "",
+    _syncProbeToken: 0,
+    syncStatus: { state: "not_configured", error: "" } as SyncStatus,
+    _syncStatusListeners: new Set<(status: SyncStatus) => void>(),
 
     async init(opts?: {
       dbName?: string;
@@ -822,8 +874,6 @@ export function createModel(defaultDbName = "spending-management") {
           return false;
         }
 
-        // Normalize CouchDB URL: empty => DEFAULT_COUCHDB_URL.
-        // Note: this intentionally removes the ability to disable sync by clearing the URL.
         const normalizedSettings: any = { ...existingSettings };
         const normalizedUrl = normalizeCouchdbUrl(normalizedSettings.couchdbURL);
         const needsSettingsWrite = normalizedSettings.couchdbURL !== normalizedUrl;
@@ -892,6 +942,36 @@ export function createModel(defaultDbName = "spending-management") {
       }
     },
 
+    _setSyncStatus(state: SyncStatusState, error = "") {
+      const nextError = state === "error" ? String(error || "") : "";
+      if (
+        this.syncStatus.state === state &&
+        this.syncStatus.error === nextError
+      ) {
+        return;
+      }
+
+      this.syncStatus = { state, error: nextError };
+      for (const listener of this._syncStatusListeners) {
+        try {
+          listener({ ...this.syncStatus });
+        } catch {
+          // ignore listener failures
+        }
+      }
+    },
+
+    async _probeSyncTarget(url: string, token: number) {
+      try {
+        await probeSyncUrl(url);
+        if (token !== this._syncProbeToken || this._syncUrl !== url) return;
+        this._setSyncStatus("ok");
+      } catch (err) {
+        if (token !== this._syncProbeToken || this._syncUrl !== url) return;
+        this._setSyncStatus("error", getSyncErrorMessage(err));
+      }
+    },
+
     _stopSync(reason?: string) {
       if (this.syncHandler && typeof this.syncHandler.cancel === "function") {
         try {
@@ -915,11 +995,15 @@ export function createModel(defaultDbName = "spending-management") {
 
       this._stopSync("restart");
       if (!this._syncWanted) {
+        this._setSyncStatus("not_configured");
         if (prevWanted) {
           logger.info("[sync] stop", { reason: "disabled" });
         }
         return;
       }
+
+      this._setSyncStatus("connecting");
+      const probeToken = ++this._syncProbeToken;
 
       try {
         logger.info(prevWanted ? "[sync] restart" : "[sync] start", {
@@ -932,41 +1016,51 @@ export function createModel(defaultDbName = "spending-management") {
           back_off_function: syncBackoff,
         });
 
-        const authHint = (err: any) => {
-          const st = err?.status;
-          if (st === 401 || st === 403) {
-            return "CouchDB requires auth; try https://user:pass@host:5984/db or adjust CouchDB security.";
+        h.on("active", () => {
+          if (this.syncStatus.state !== "ok") {
+            this._setSyncStatus("connecting");
           }
-          return undefined;
-        };
+        });
+        h.on("change", () => {
+          this._setSyncStatus("ok");
+        });
 
-        h.on("denied", (err: any) =>
+        h.on("denied", (err: any) => {
+          this._setSyncStatus("error", getSyncErrorMessage(err));
           logger.warn("[sync] denied", {
             status: err?.status,
             name: err?.name,
             message: err?.message,
-            hint: authHint(err),
-          }),
-        );
-        h.on("error", (err: any) =>
+            hint: getSyncAuthHint(err),
+          });
+        });
+        h.on("error", (err: any) => {
+          this._setSyncStatus("error", getSyncErrorMessage(err));
           logger.warn("[sync] error", {
             status: err?.status,
             name: err?.name,
             message: err?.message,
-            hint: authHint(err),
-          }),
-        );
+            hint: getSyncAuthHint(err),
+          });
+        });
         h.on("paused", (err: any) => {
-          if (err)
+          if (err) {
+            this._setSyncStatus("error", getSyncErrorMessage(err));
             logger.info("[sync] paused", {
               status: err?.status,
               name: err?.name,
               message: err?.message,
-              hint: authHint(err),
+              hint: getSyncAuthHint(err),
             });
+            return;
+          }
+
+          this._setSyncStatus("ok");
         });
         this.syncHandler = h;
+        void this._probeSyncTarget(url, probeToken);
       } catch (e) {
+        this._setSyncStatus("error", getSyncErrorMessage(e));
         logger.warn("[sync] failed to start", e);
       }
     },
@@ -1217,6 +1311,23 @@ export function createModel(defaultDbName = "spending-management") {
 
     get_couchdb_url(): string {
       return normalizeCouchdbUrl(this.settings!.couchdbURL);
+    },
+
+    get_sync_status(): SyncStatus {
+      return { ...this.syncStatus };
+    },
+
+    subscribe_sync_status(listener: (status: SyncStatus) => void) {
+      this._syncStatusListeners.add(listener);
+      try {
+        listener(this.get_sync_status());
+      } catch {
+        // ignore listener failures
+      }
+
+      return () => {
+        this._syncStatusListeners.delete(listener);
+      };
     },
 
     async set_couchdb_url(url: string) {
@@ -1872,6 +1983,7 @@ export function createModel(defaultDbName = "spending-management") {
       this.categories = [];
       this.weekly_exp = undefined;
       this.monthly_exp = undefined;
+      this._setSyncStatus("not_configured");
     },
 
     async clear_data(): Promise<void> {

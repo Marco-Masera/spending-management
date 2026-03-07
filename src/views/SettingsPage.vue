@@ -162,18 +162,23 @@
    <ion-button color="danger" @click="clear_data()">Clear data</ion-button>
   </div>
 
- <div class="dividercontainer" style="margin-top: 18px;">
-       <ion-item-divider class="withtopborder">
-        <p class="weightened">
-        CouchDB sync
-        </p>
-      </ion-item-divider>
- </div>
+  <div class="dividercontainer" style="margin-top: 18px;">
+        <ion-item-divider class="withtopborder">
+         <p class="weightened">
+         CouchDB sync
+         </p>
+       </ion-item-divider>
+  </div>
 
- <div class="amountdiv" style="margin-top:14px; margin-bottom:12px">
-    <ion-item class="floating-input-item" style="width:85%">
-      <ion-label position="floating">CouchDB URL:</ion-label>
-      <ion-input
+  <div class="sync-status" :class="`sync-status--${syncStatus.state}`">
+    <ion-icon :icon="getSyncStatusIcon()" :color="getSyncStatusColor()"></ion-icon>
+    <span>{{ getSyncStatusLabel() }}</span>
+  </div>
+
+  <div class="amountdiv" style="margin-top:14px; margin-bottom:12px">
+     <ion-item class="floating-input-item" style="width:85%">
+       <ion-label position="floating">CouchDB URL:</ion-label>
+       <ion-input
         type="text"
         v-model="couchdbURL"
         :placeholder="defaultCouchdbUrl || 'https://user:pass@host:5984/db'"
@@ -184,6 +189,10 @@
   <div class="middle" style="height:45px">
     <ion-button @click="saveCouchdbURL">Save sync URL</ion-button>
   </div>
+
+  <p v-if="syncStatus.state === 'error' && syncStatus.error" class="sync-status-error">
+    {{ syncStatus.error }}
+  </p>
 
   <div class="dividercontainer" style="margin-top: 18px;">
        <ion-item-divider class="withtopborder">
@@ -230,9 +239,9 @@
 <script lang="ts">
 import { useRouter } from 'vue-router';
 import { alertController , IonIcon, IonChip, IonButtons, IonButton, IonPopover, IonRadio, IonRadioGroup, IonContent,IonBackButton, toastController, IonInput , IonHeader, IonPage, IonItem, IonLabel, IonList, IonItemDivider, IonTitle, IonToolbar } from '@ionic/vue';
-import { model, type AddRecurringExpenseInput, type RecurringExpense } from '../data/model'
+import { model, type AddRecurringExpenseInput, type RecurringExpense, type SyncStatus } from '../data/model'
 import { defineComponent } from 'vue';
-import { closeCircle } from 'ionicons/icons';
+import { alertCircle, checkmarkCircle, closeCircle, cloudOfflineOutline, syncOutline } from 'ionicons/icons';
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
@@ -246,13 +255,15 @@ export default defineComponent({
   name: 'SettingsPage',
   setup(){
     const router = useRouter();
-    return { router, closeCircle };
+    return { router, alertCircle, checkmarkCircle, closeCircle, cloudOfflineOutline, syncOutline };
   },
   data() {
     return {
       currency: "",
       couchdbURL: "",
       defaultCouchdbUrl: DEFAULT_COUCHDB_URL,
+      syncStatus: { state: 'not_configured', error: '' } as SyncStatus,
+      syncStatusUnsubscribe: undefined as (() => void) | undefined,
       isfirst: false,
       categories: [''],
       colors: ["primary", "secondary", "tertiary", "success", "warning"],
@@ -519,14 +530,27 @@ export default defineComponent({
       model.set_default_value(this.$data.currency)
       this.presentToast("Currency updated")
     },
+    getSyncStatusIcon(){
+      if (this.$data.syncStatus.state === 'ok') return this.checkmarkCircle
+      if (this.$data.syncStatus.state === 'error') return this.alertCircle
+      if (this.$data.syncStatus.state === 'connecting') return this.syncOutline
+      return this.cloudOfflineOutline
+    },
+    getSyncStatusColor(){
+      if (this.$data.syncStatus.state === 'ok') return 'success'
+      if (this.$data.syncStatus.state === 'error') return 'danger'
+      if (this.$data.syncStatus.state === 'connecting') return 'primary'
+      return 'medium'
+    },
+    getSyncStatusLabel(){
+      if (this.$data.syncStatus.state === 'ok') return 'Replication active'
+      if (this.$data.syncStatus.state === 'error') return 'Replication error'
+      if (this.$data.syncStatus.state === 'connecting') return 'Connecting to CouchDB'
+      return 'Sync not configured'
+    },
     async saveCouchdbURL(){
-      try{
-        await model.set_couchdb_url(this.$data.couchdbURL)
-        this.presentToast("Sync URL updated")
-      } catch {
-        // Never error the user for sync failures.
-        this.presentToast("Sync URL updated")
-      }
+      await model.set_couchdb_url(this.$data.couchdbURL)
+      this.presentToast(this.$data.couchdbURL.trim() ? 'Sync URL updated' : 'Sync disabled')
     },
     async export_logs(){
       if (Capacitor.getPlatform() !== 'android'){
@@ -578,7 +602,10 @@ export default defineComponent({
       await model.init()
       this.$data.currency = model.get_default_value()
       const savedUrl = model.get_couchdb_url ? model.get_couchdb_url() : ""
-      this.$data.couchdbURL = savedUrl || this.$data.defaultCouchdbUrl || ""
+      this.$data.couchdbURL = savedUrl || ""
+      if (model.get_sync_status) {
+        this.$data.syncStatus = model.get_sync_status()
+      }
       this.$data.categories = model.get_categories()
       this.$data.budget = model.get_budget()
       if (this.$data.budget.type != 0){
@@ -635,7 +662,15 @@ export default defineComponent({
     RecurringExpenseList,
   },
   created(){
+    if (model.subscribe_sync_status) {
+      this.$data.syncStatusUnsubscribe = model.subscribe_sync_status((status: SyncStatus) => {
+        this.$data.syncStatus = status
+      })
+    }
     this.init()
+  },
+  beforeUnmount(){
+    this.$data.syncStatusUnsubscribe?.()
   }
 });
 </script>
@@ -654,6 +689,38 @@ export default defineComponent({
   --padding-start: 10px;
   --padding-end: 10px;
   white-space: nowrap;
+}
+
+.sync-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 14px 0 4px;
+  color: var(--ion-color-medium-shade);
+  font-weight: 600;
+}
+
+.sync-status ion-icon {
+  font-size: 1.1rem;
+}
+
+.sync-status--ok {
+  color: var(--ion-color-success-shade);
+}
+
+.sync-status--connecting {
+  color: var(--ion-color-primary-shade);
+}
+
+.sync-status--error {
+  color: var(--ion-color-danger-shade);
+}
+
+.sync-status-error {
+  margin: 0 24px 12px;
+  color: var(--ion-color-danger);
+  text-align: center;
 }
 
 .recurring-manager__title {

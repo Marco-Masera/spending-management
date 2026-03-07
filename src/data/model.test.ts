@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createModel } from '@/data/model'
-import { DEFAULT_CATEGORIES, DEFAULT_COUCHDB_URL } from '@/data/modelDefaults'
+import { DEFAULT_CATEGORIES } from '@/data/modelDefaults'
 
 function monthId(month0: number, year: number) {
   const ym = year * 100 + (month0 + 1)
@@ -19,7 +19,8 @@ describe('pouchdb-backed model', () => {
     expect(first).toBe(false)
     expect(m.get_default_value()).toBe('€')
     expect(m.get_budget()).toEqual({ type: 0, budget: 0 })
-    expect(m.get_couchdb_url()).toBe(DEFAULT_COUCHDB_URL)
+    expect(m.get_couchdb_url()).toBe('')
+    expect(m.get_sync_status()).toEqual({ state: 'not_configured', error: '' })
     expect(m.get_categories().length).toBeGreaterThan(0)
 
     await m.__test_destroy_db()
@@ -339,17 +340,50 @@ describe('pouchdb-backed model', () => {
     const m: any = createModel(`test-sync-${Date.now()}-${Math.random()}`)
     await m.init({ platform: 'web' })
 
+    m._probeSyncTarget = vi.fn(async (url: string) => {
+      if (url.includes('offline')) {
+        m._setSyncStatus('error', 'Could not connect to CouchDB.')
+        return
+      }
+      m._setSyncStatus('ok')
+    })
+
+    const callbacks: Record<string, (payload?: any) => void> = {}
     const handler: any = {
-      on: vi.fn(() => handler),
+      on: vi.fn((event: string, cb: (payload?: any) => void) => {
+        callbacks[event] = cb
+        return handler
+      }),
       cancel: vi.fn(),
     }
     m.db.sync = vi.fn(() => handler)
 
     await m.set_couchdb_url('https://user:pass@localhost:5984/spending')
     expect(m.db.sync).toHaveBeenCalledTimes(1)
+    expect(m._probeSyncTarget).toHaveBeenCalledWith(
+      'https://user:pass@localhost:5984/spending',
+      expect.any(Number),
+    )
+    expect(m.get_sync_status()).toEqual({ state: 'ok', error: '' })
+
+    callbacks.active?.()
+    expect(m.get_sync_status()).toEqual({ state: 'ok', error: '' })
+
+    callbacks.error?.({ message: 'bad gateway' })
+    expect(m.get_sync_status()).toEqual({ state: 'error', error: 'bad gateway' })
+
+    callbacks.active?.()
+    expect(m.get_sync_status()).toEqual({ state: 'connecting', error: '' })
+
+    callbacks.change?.()
+    expect(m.get_sync_status()).toEqual({ state: 'ok', error: '' })
+
+    await m.set_couchdb_url('https://user:pass@offline:5984/spending')
+    expect(m.get_sync_status()).toEqual({ state: 'error', error: 'Could not connect to CouchDB.' })
 
     await m.set_couchdb_url('')
     expect(handler.cancel).toHaveBeenCalledTimes(1)
+    expect(m.get_sync_status()).toEqual({ state: 'not_configured', error: '' })
 
     await m.__test_destroy_db()
   })
