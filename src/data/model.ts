@@ -429,8 +429,26 @@ function parseIsoTs(x: unknown): number | undefined {
   return ts;
 }
 
-function decodeBase64Utf8(data: unknown): string | undefined {
-  const b64 = String(data ?? "").trim();
+function stripUtf8Bom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+function stripDataUrlPrefix(data: string): string {
+  if (!data.startsWith("data:")) return data;
+  const comma = data.indexOf(",");
+  return comma >= 0 ? data.slice(comma + 1) : data;
+}
+
+export function decodePickedFileData(data: unknown): string | undefined {
+  const raw = String(data ?? "").trim();
+  if (!raw) return undefined;
+
+  const directText = stripUtf8Bom(raw);
+  if (directText.startsWith("{") || directText.startsWith("[")) {
+    return directText;
+  }
+
+  const b64 = stripDataUrlPrefix(raw).trim();
   if (!b64) return undefined;
 
   try {
@@ -440,13 +458,54 @@ function decodeBase64Utf8(data: unknown): string | undefined {
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     if (typeof TextDecoder !== "undefined") {
-      return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+      return stripUtf8Bom(
+        new TextDecoder("utf-8", { fatal: false }).decode(bytes),
+      );
     }
     // Fallback: best-effort (works for ASCII JSON).
-    return bin;
+    return stripUtf8Bom(bin);
   } catch {
     return undefined;
   }
+}
+
+async function readPickedFileText(file: any, logScope: string): Promise<string | undefined> {
+  const dataText = decodePickedFileData(file?.data);
+  if (dataText !== undefined) {
+    logger.info(`[${logScope}] using picked file data payload`, {
+      bytes: dataText.length,
+    });
+    return dataText;
+  }
+
+  const rawPath = String(file?.path ?? "").trim();
+  if (!rawPath) return undefined;
+
+  const fetchTargets = [rawPath];
+  const convertedPath = Capacitor.convertFileSrc(rawPath);
+  if (convertedPath && convertedPath !== rawPath) {
+    fetchTargets.push(convertedPath);
+  }
+
+  for (const target of fetchTargets) {
+    try {
+      const resp = await fetch(target);
+      logger.info(`[${logScope}] fetched picked file`, {
+        viaConvertedPath: target !== rawPath,
+        status: (resp as any)?.status,
+        ok: (resp as any)?.ok,
+      });
+      if (!resp.ok) continue;
+      return stripUtf8Bom(await resp.text());
+    } catch (e) {
+      logger.warn(`[${logScope}] failed to fetch picked file`, {
+        viaConvertedPath: target !== rawPath,
+        error: e,
+      });
+    }
+  }
+
+  return undefined;
 }
 
 function legacyDocsDebugStats(docs: any[]): Record<string, any> {
@@ -1591,13 +1650,8 @@ export function createModel(defaultDbName = "spending-management") {
 
       let obj: any;
       try {
-        let text = "";
-        if (path) {
-          const blob = await fetch(path).then((r) => r.blob());
-          text = await blob.text();
-        } else {
-          text = decodeBase64Utf8(data) ?? "";
-        }
+        const text = await readPickedFileText(file, "import_data");
+        if (!text) throw new Error("missing file text");
         obj = JSON.parse(text);
       } catch {
         return false;
@@ -1689,19 +1743,8 @@ export function createModel(defaultDbName = "spending-management") {
 
       let obj: any;
       try {
-        let text = "";
-        if (path) {
-          const resp = await fetch(path);
-          logger.info("[import_legacy] fetch ok", {
-            status: (resp as any)?.status,
-            ok: (resp as any)?.ok,
-          });
-          const blob = await resp.blob();
-          text = await blob.text();
-        } else {
-          text = decodeBase64Utf8(data) ?? "";
-          logger.info("[import_legacy] decoded file data", { bytes: text.length });
-        }
+        const text = await readPickedFileText(file, "import_legacy");
+        if (!text) throw new Error("missing file text");
         obj = JSON.parse(text);
       } catch (e) {
         logger.warn("[import_legacy] failed to read/parse JSON", e);

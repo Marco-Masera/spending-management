@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { legacyToDocs, BudgetType } from '@/data/model'
+import { legacyToDocs, BudgetType, decodePickedFileData } from '@/data/model'
 import { DEFAULT_CATEGORIES } from '@/data/modelDefaults'
 
 function monthId(month0: number, year: number) {
@@ -9,6 +9,15 @@ function monthId(month0: number, year: number) {
 }
 
 describe('legacy import conversion', () => {
+  it('decodes JSON file picker payloads from mobile', () => {
+    const json = JSON.stringify({ hello: 'world' })
+    const base64 = btoa(json)
+
+    expect(decodePickedFileData(base64)).toBe(json)
+    expect(decodePickedFileData(`data:application/json;base64,${base64}`)).toBe(json)
+    expect(decodePickedFileData(`\ufeff${json}`)).toBe(json)
+  })
+
   it('uses last valid month bucket for settings budget and imports only seen categories', () => {
     const legacy: any = {
       '0_2024': {
