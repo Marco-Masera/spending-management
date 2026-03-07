@@ -52,6 +52,22 @@ export interface AddRecurringExpenseInput {
   interval?: number;
 }
 
+export interface RecurringExpense {
+  _id: string;
+  amount: number;
+  category: string;
+  frequency: RecurringFrequency;
+  interval: number;
+  startDate: Date;
+  endDate: Date | null;
+  active: boolean;
+}
+
+export interface ListRecurringExpensesInput {
+  start: Date | string | number;
+  end: Date | string | number;
+}
+
 export interface HomePageLocalizer {
   x: string;
 }
@@ -225,6 +241,41 @@ function normalizeRecurringEndTs(
     d.getDate(),
     anchor,
   ).getTime();
+}
+
+function recurringExpenseOverlapsRange(
+  doc: RecurringExpenseDoc,
+  startTs: number,
+  endTs: number,
+): boolean {
+  return doc.startTs <= endTs && (doc.endTs === undefined || startTs <= doc.endTs);
+}
+
+function compareRecurringExpenseDocs(
+  a: RecurringExpenseDoc,
+  b: RecurringExpenseDoc,
+): number {
+  const aEnd = a.endTs;
+  const bEnd = b.endTs;
+
+  if (aEnd === undefined && bEnd !== undefined) return -1;
+  if (aEnd !== undefined && bEnd === undefined) return 1;
+  if (aEnd !== undefined && bEnd !== undefined && aEnd !== bEnd) return aEnd - bEnd;
+  if (a.startTs !== b.startTs) return b.startTs - a.startTs;
+  return a._id.localeCompare(b._id);
+}
+
+function toRecurringExpense(doc: RecurringExpenseDoc): RecurringExpense {
+  return {
+    _id: doc._id,
+    amount: Number(doc.cost),
+    category: doc.category,
+    frequency: doc.frequency,
+    interval: doc.interval,
+    startDate: new Date(doc.startTs),
+    endDate: doc.endTs === undefined ? null : new Date(doc.endTs),
+    active: doc.active,
+  };
 }
 
 function monthIndex(year: number, month: number): number {
@@ -934,6 +985,30 @@ export function createModel(defaultDbName = "spending-management") {
       return docs;
     },
 
+    async list_all_recurring_expenses(): Promise<RecurringExpense[]> {
+      const docs = await this.getRecurringExpenseDocs();
+      docs.sort(compareRecurringExpenseDocs);
+      return docs.map(toRecurringExpense);
+    },
+
+    async list_recurring_expenses(
+      input: ListRecurringExpensesInput,
+    ): Promise<RecurringExpense[]> {
+      const startDate = asValidDate(input?.start);
+      const endDate = asValidDate(input?.end);
+      if (!startDate || !endDate) return [];
+
+      const startTs = startDate.getTime();
+      const endTs = endDate.getTime();
+      if (startTs > endTs) return [];
+
+      const docs = await this.getRecurringExpenseDocs();
+      return docs
+        .filter((doc) => recurringExpenseOverlapsRange(doc, startTs, endTs))
+        .sort(compareRecurringExpenseDocs)
+        .map(toRecurringExpense);
+    },
+
     async getRecurringSkipSetInRange(
       startTs: number,
       endTs: number,
@@ -1198,6 +1273,46 @@ export function createModel(defaultDbName = "spending-management") {
       }
 
       await this.db!.remove(recurringDoc);
+      return true;
+    },
+
+    async update_recurring_expense_end_date(
+      recurringId: string,
+      endDate: Date | string | number | null | undefined,
+    ): Promise<boolean> {
+      await this.ensureInit();
+
+      const id = String(recurringId || "").trim();
+      if (!id) return false;
+
+      const recurringDoc = await safeGet<any>(this.db!, id);
+      if (!recurringDoc || recurringDoc.type !== "recurring_expense") return false;
+
+      const anchor = new Date(recurringDoc.startTs);
+      const normalizedEndTs =
+        endDate == null ? undefined : normalizeRecurringEndTs(endDate, anchor);
+      if (endDate != null && normalizedEndTs === undefined) return false;
+      if (
+        normalizedEndTs !== undefined &&
+        normalizedEndTs < Number(recurringDoc.startTs)
+      ) {
+        return false;
+      }
+
+      this.weekly_exp = undefined;
+      this.monthly_exp = undefined;
+
+      const nextDoc: RecurringExpenseDoc = {
+        ...recurringDoc,
+        endTs: normalizedEndTs,
+        active: true,
+      };
+
+      if (normalizedEndTs === undefined) {
+        delete nextDoc.endTs;
+      }
+
+      await this.db!.put(nextDoc as any);
       return true;
     },
 

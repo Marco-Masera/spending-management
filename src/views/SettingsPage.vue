@@ -106,6 +106,47 @@
 </div>
 </div>
 
+<div class="dividercontainer" style="margin-top: 18px;">
+       <ion-item-divider class="withtopborder">
+        <p class="weightened">
+        Recurring expenses
+        </p>
+      </ion-item-divider>
+ </div>
+
+<p class="weightened recurring-manager__subtitle">
+  {{
+    showAllRecurring
+      ? 'Showing all non-deleted recurring expenses.'
+      : 'Showing currently active recurring expenses.'
+  }}
+</p>
+
+<div class="middle recurring-manager__actions">
+  <ion-button
+    :fill="showAllRecurring ? 'outline' : 'solid'"
+    @click="setRecurringExpenseView(false)"
+  >
+    Active
+  </ion-button>
+  <ion-button
+    :fill="showAllRecurring ? 'solid' : 'outline'"
+    @click="setRecurringExpenseView(true)"
+  >
+    View all
+  </ion-button>
+  <ion-button @click="openCreateRecurringExpenseForm">New recurring expense</ion-button>
+</div>
+
+<div class="amountdiv recurring-manager__listwrap">
+  <RecurringExpenseList
+    :items="recurringExpenses"
+    :loading="isRecurringLoading"
+    :empty-message="showAllRecurring ? 'No recurring expenses yet.' : 'No active recurring expenses right now.'"
+    @edit="openEditRecurringExpenseForm"
+  />
+</div>
+
 <div class="dividercontainer">
        <ion-item-divider class="withtopborder">
         <p class="weightened">
@@ -171,6 +212,16 @@
     <ion-button @click="isAdding=false"  style="padding-left:10px; padding-right:10px; margin-bottom:12px">Cancel</ion-button>
 </ion-popover>
 
+<RecurringExpenseForm
+  :open="isRecurringFormOpen"
+  :mode="recurringFormMode"
+  :expense="selectedRecurringExpense"
+  :categories="categories"
+  :saving="isRecurringSaving"
+  @cancel="closeRecurringExpenseForm"
+  @save="saveRecurringExpense"
+/>
+
     </ion-content>
   </ion-page>
 </template>
@@ -178,7 +229,7 @@
 <script lang="ts">
 import { useRouter } from 'vue-router';
 import { alertController , IonIcon, IonChip, IonButtons, IonButton, IonPopover, IonRadio, IonRadioGroup, IonContent,IonBackButton, toastController, IonInput , IonHeader, IonPage, IonItem, IonLabel, IonList, IonItemDivider, IonTitle, IonToolbar } from '@ionic/vue';
-import { model } from '../data/model'
+import { model, type AddRecurringExpenseInput, type RecurringExpense } from '../data/model'
 import { defineComponent } from 'vue';
 import { closeCircle } from 'ionicons/icons';
 import { Capacitor } from '@capacitor/core'
@@ -187,6 +238,8 @@ import { Share } from '@capacitor/share'
 import { LOG_FILE_PATH } from '@/lib/logger'
 import { logger } from '@/lib/logger'
 import { DEFAULT_COUCHDB_URL } from '@/data/modelDefaults'
+import RecurringExpenseForm from '@/components/settings/RecurringExpenseForm.vue'
+import RecurringExpenseList from '@/components/settings/RecurringExpenseList.vue'
 
 export default defineComponent({
   name: 'SettingsPage',
@@ -207,6 +260,13 @@ export default defineComponent({
       newCatName: "",
       budget: {budget:0, type:0},
       budget_time: 'monthly',
+      recurringExpenses: [] as RecurringExpense[],
+      showAllRecurring: false,
+      isRecurringLoading: false,
+      isRecurringFormOpen: false,
+      isRecurringSaving: false,
+      recurringFormMode: 'create' as 'create' | 'edit-end',
+      selectedRecurringExpense: null as RecurringExpense | null,
       getBackButtonText: () => {
         const win = window as any;
         const mode = win && win.Ionic && win.Ionic.mode;
@@ -218,6 +278,87 @@ export default defineComponent({
     openAddPopover(ev: Event) {
       this.$data.popoverEvent = ev
       this.$data.isAdding = true
+    },
+    async loadRecurringExpenses(){
+      this.$data.isRecurringLoading = true
+      try {
+        const now = new Date(Date.now())
+        this.$data.recurringExpenses = this.$data.showAllRecurring
+          ? await model.list_all_recurring_expenses()
+          : await model.list_recurring_expenses({ start: now, end: now })
+      } catch {
+        this.$data.recurringExpenses = []
+        this.presentToast('Could not load recurring expenses', 2500)
+      } finally {
+        this.$data.isRecurringLoading = false
+      }
+    },
+    async setRecurringExpenseView(showAll: boolean){
+      if (this.$data.showAllRecurring === showAll && this.$data.recurringExpenses.length > 0){
+        return
+      }
+      this.$data.showAllRecurring = showAll
+      await this.loadRecurringExpenses()
+    },
+    openCreateRecurringExpenseForm(){
+      this.$data.recurringFormMode = 'create'
+      this.$data.selectedRecurringExpense = null
+      this.$data.isRecurringFormOpen = true
+    },
+    openEditRecurringExpenseForm(expense: RecurringExpense){
+      this.$data.recurringFormMode = 'edit-end'
+      this.$data.selectedRecurringExpense = expense
+      this.$data.isRecurringFormOpen = true
+    },
+    closeRecurringExpenseForm(){
+      this.$data.isRecurringFormOpen = false
+      this.$data.selectedRecurringExpense = null
+      this.$data.isRecurringSaving = false
+    },
+    async saveRecurringExpense(payload: AddRecurringExpenseInput | { endDate: Date | null }){
+      if (this.$data.isRecurringSaving){
+        return
+      }
+
+      this.$data.isRecurringSaving = true
+      try {
+        let success = false
+        if (this.$data.recurringFormMode === 'create'){
+          success = await model.add_recurring_expense(payload as AddRecurringExpenseInput)
+        } else if (this.$data.selectedRecurringExpense) {
+          success = await model.update_recurring_expense_end_date(
+            this.$data.selectedRecurringExpense._id,
+            (payload as { endDate: Date | null }).endDate,
+          )
+        }
+
+        if (!success){
+          this.presentToast(
+            this.$data.recurringFormMode === 'create'
+              ? 'Could not create recurring expense'
+              : 'Could not update recurring expense',
+            2500,
+          )
+          return
+        }
+
+        this.presentToast(
+          this.$data.recurringFormMode === 'create'
+            ? 'Recurring expense created'
+            : 'Recurring expense updated',
+        )
+        this.closeRecurringExpenseForm()
+        await this.loadRecurringExpenses()
+      } catch {
+        this.presentToast(
+          this.$data.recurringFormMode === 'create'
+            ? 'Could not create recurring expense'
+            : 'Could not update recurring expense',
+          2500,
+        )
+      } finally {
+        this.$data.isRecurringSaving = false
+      }
     },
     export_data(){
       model.export_data().then( (result: boolean) =>{
@@ -399,6 +540,7 @@ export default defineComponent({
         console.log("t")
           this.$data.isfirst = true
       }
+      await this.loadRecurringExpenses()
     },
     async saveBudget(){
         let x = 0
@@ -440,7 +582,9 @@ export default defineComponent({
     IonTitle,
     IonToolbar,
     IonRadio, IonRadioGroup,
-    IonButton,IonButtons,IonLabel, IonChip, IonIcon,IonList, IonItem, IonItemDivider,IonPopover
+    IonButton,IonButtons,IonLabel, IonChip, IonIcon,IonList, IonItem, IonItemDivider,IonPopover,
+    RecurringExpenseForm,
+    RecurringExpenseList,
   },
   created(){
     this.init()
@@ -462,5 +606,33 @@ export default defineComponent({
   --padding-start: 10px;
   --padding-end: 10px;
   white-space: nowrap;
+}
+
+.recurring-manager__title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ion-color-dark);
+}
+
+.recurring-manager__subtitle {
+  margin-top: 18px;
+  margin-bottom: 0;
+}
+
+.recurring-manager__actions {
+  margin-top: 18px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.recurring-manager__listwrap {
+  margin-top: 18px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 640px) {
+  .recurring-manager__actions {
+    height: auto;
+  }
 }
 </style>

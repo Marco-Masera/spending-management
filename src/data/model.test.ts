@@ -126,6 +126,68 @@ describe('pouchdb-backed model', () => {
     await m.__test_destroy_db()
   })
 
+  it('lists recurring expenses with active filtering and default ordering', async () => {
+    const now = new Date(2025, 0, 15, 12, 0, 0).getTime()
+    vi.spyOn(Date, 'now').mockReturnValue(now)
+
+    const m: any = createModel(`test-recurring-list-${Date.now()}-${Math.random()}`)
+    await m.init({ platform: 'web' })
+
+    await m.add_recurring_expense({
+      amount: 10,
+      category: 'Recurring A',
+      frequency: 'monthly',
+      startDate: new Date(2025, 0, 1, 9, 0, 0),
+    })
+    await m.add_recurring_expense({
+      amount: 20,
+      category: 'Recurring B',
+      frequency: 'monthly',
+      startDate: new Date(2024, 11, 1, 9, 0, 0),
+    })
+    await m.add_recurring_expense({
+      amount: 30,
+      category: 'Recurring C',
+      frequency: 'monthly',
+      startDate: new Date(2025, 0, 1, 9, 0, 0),
+      endDate: new Date(2025, 1, 1),
+    })
+    await m.add_recurring_expense({
+      amount: 40,
+      category: 'Recurring Future',
+      frequency: 'monthly',
+      startDate: new Date(2025, 1, 1, 9, 0, 0),
+    })
+    await m.add_recurring_expense({
+      amount: 50,
+      category: 'Recurring Ended',
+      frequency: 'monthly',
+      startDate: new Date(2024, 10, 1, 9, 0, 0),
+      endDate: new Date(2025, 0, 10),
+    })
+
+    const all = await m.list_all_recurring_expenses()
+    expect(all.map((item: any) => item.category)).toEqual([
+      'Recurring Future',
+      'Recurring A',
+      'Recurring B',
+      'Recurring Ended',
+      'Recurring C',
+    ])
+
+    const active = await m.list_recurring_expenses({
+      start: new Date(now),
+      end: new Date(now),
+    })
+    expect(active.map((item: any) => item.category)).toEqual([
+      'Recurring A',
+      'Recurring B',
+      'Recurring C',
+    ])
+
+    await m.__test_destroy_db()
+  })
+
   it('supports yearly recurring expenses out of the box', async () => {
     const m: any = createModel(`test-recurring-yearly-${Date.now()}-${Math.random()}`)
     await m.init({ platform: 'web' })
@@ -152,6 +214,50 @@ describe('pouchdb-backed model', () => {
 
     const july2028 = await m.get_all_month_expenses(6, 2028)
     expect(july2028).toHaveLength(0)
+
+    await m.__test_destroy_db()
+  })
+
+  it('updates and clears an existing recurring expense end date', async () => {
+    const m: any = createModel(`test-recurring-update-end-${Date.now()}-${Math.random()}`)
+    await m.init({ platform: 'web' })
+
+    const created = await m.add_recurring_expense({
+      amount: 18,
+      category: 'Membership',
+      frequency: 'monthly',
+      startDate: new Date(2026, 0, 5, 9, 30, 0),
+    })
+
+    expect(created).toBe(true)
+
+    const recurring = await m.list_all_recurring_expenses()
+    expect(recurring).toHaveLength(1)
+
+    const updated = await m.update_recurring_expense_end_date(
+      recurring[0]._id,
+      new Date(2026, 1, 5),
+    )
+    expect(updated).toBe(true)
+
+    const february = await m.get_all_month_expenses(1, 2026)
+    expect(february).toHaveLength(1)
+
+    const march = await m.get_all_month_expenses(2, 2026)
+    expect(march).toHaveLength(0)
+
+    const afterUpdate = await m.list_all_recurring_expenses()
+    expect(afterUpdate[0].endDate).toBeInstanceOf(Date)
+    expect(afterUpdate[0].endDate?.getMonth()).toBe(1)
+
+    const cleared = await m.update_recurring_expense_end_date(recurring[0]._id, null)
+    expect(cleared).toBe(true)
+
+    const april = await m.get_all_month_expenses(3, 2026)
+    expect(april).toHaveLength(1)
+
+    const afterClear = await m.list_all_recurring_expenses()
+    expect(afterClear[0].endDate).toBeNull()
 
     await m.__test_destroy_db()
   })
