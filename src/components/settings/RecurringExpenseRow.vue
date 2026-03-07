@@ -27,7 +27,7 @@
         Delete
       </ion-button>
       <ion-button fill="outline" size="small" @click="$emit('edit', expense)">
-        Edit end time
+        Edit end date
       </ion-button>
     </div>
   </article>
@@ -78,8 +78,6 @@ export default defineComponent({
         year: 'numeric',
         month: 'short',
         day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
       }).format(date)
     },
   },

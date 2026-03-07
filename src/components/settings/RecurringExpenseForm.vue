@@ -41,8 +41,8 @@
           </div>
 
           <label>
-            <span>Start time</span>
-            <input v-model="startLocal" type="datetime-local" required />
+            <span>Start date</span>
+            <input v-model="startLocal" type="date" required />
           </label>
         </template>
 
@@ -53,8 +53,8 @@
         </div>
 
         <label>
-          <span>End time</span>
-          <input v-model="endLocal" type="datetime-local" placeholder="Never" />
+          <span>End date</span>
+          <input v-model="endLocal" type="date" />
         </label>
 
         <div class="recurring-form__actions">
@@ -136,10 +136,10 @@ export default defineComponent({
   },
   computed: {
     panelTitle(): string {
-      return this.mode === 'create' ? 'Create recurring expense' : 'Edit recurring expense end time'
+      return this.mode === 'create' ? 'Create recurring expense' : 'Edit recurring expense end date'
     },
     submitLabel(): string {
-      return this.mode === 'create' ? 'Create recurring expense' : 'Update end time'
+      return this.mode === 'create' ? 'Create recurring expense' : 'Update end date'
     },
     canSubmit(): boolean {
       if (this.mode === 'edit-end') {
@@ -172,8 +172,8 @@ export default defineComponent({
         this.category = this.expense.category
         this.frequency = this.expense.frequency
         this.interval = this.expense.interval
-        this.startLocal = this.toLocalDateTime(this.expense.startDate)
-        this.endLocal = this.expense.endDate ? this.toLocalDateTime(this.expense.endDate) : ''
+        this.startLocal = this.toDateInputValue(this.expense.startDate)
+        this.endLocal = this.expense.endDate ? this.toDateInputValue(this.expense.endDate) : ''
         return
       }
 
@@ -181,46 +181,64 @@ export default defineComponent({
       this.category = this.categories[0] ?? ''
       this.frequency = 'monthly'
       this.interval = 1
-      this.startLocal = this.toLocalDateTime(new Date(Date.now()))
+      this.startLocal = this.toDateInputValue(new Date(Date.now()))
       this.endLocal = ''
     },
-    toLocalDateTime(date: Date): string {
+    toDateInputValue(date: Date): string {
       const year = date.getFullYear()
       const month = String(date.getMonth() + 1).padStart(2, '0')
       const day = String(date.getDate()).padStart(2, '0')
-      const hours = String(date.getHours()).padStart(2, '0')
-      const minutes = String(date.getMinutes()).padStart(2, '0')
-      return `${year}-${month}-${day}T${hours}:${minutes}`
+      return `${year}-${month}-${day}`
+    },
+    parseDateInput(value: string): Date | null {
+      if (!value) return null
+
+      const [year, month, day] = value.split('-').map(Number)
+      if (
+        !Number.isInteger(year) ||
+        !Number.isInteger(month) ||
+        !Number.isInteger(day)
+      ) {
+        return null
+      }
+
+      return new Date(year, month - 1, day)
     },
     formatDate(date: Date): string {
       return new Intl.DateTimeFormat(undefined, {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
       }).format(date)
     },
     submitForm() {
       if (!this.canSubmit) return
 
       if (this.mode === 'edit-end') {
+        const endDate = this.endLocal ? this.parseDateInput(this.endLocal) : null
+        if (this.endLocal && !endDate) return
+
         this.$emit('save', {
-          endDate: this.endLocal ? new Date(this.endLocal) : null,
+          endDate,
         })
         return
       }
+
+      const startDate = this.parseDateInput(this.startLocal)
+      if (!startDate) return
 
       const payload: AddRecurringExpenseInput = {
         amount: Number(this.amount),
         category: this.category,
         frequency: this.frequency,
         interval: Number(this.interval),
-        startDate: new Date(this.startLocal),
+        startDate,
       }
 
       if (this.endLocal) {
-        payload.endDate = new Date(this.endLocal)
+        const endDate = this.parseDateInput(this.endLocal)
+        if (!endDate) return
+        payload.endDate = endDate
       }
 
       this.$emit('save', payload)
