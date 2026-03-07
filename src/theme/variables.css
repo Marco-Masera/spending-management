@@ -90,6 +90,14 @@ div.amountdiv {
   justify-content: center;
 }
 
+ion-item.floating-input-item {
+  --min-height: 64px;
+}
+
+ion-item.floating-input-item ion-input {
+  --padding-top: 14px;
+}
+
 
 div.chipcontainer {
   display: flex;
