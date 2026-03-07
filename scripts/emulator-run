@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PKG_NAME="io.ionic.starter"
+
+"${ROOT_DIR}/scripts/require-emulator"
+
+DEVICE_ID="$("${ROOT_DIR}/scripts/emulator-device-id")"
+
+exec adb -s "${DEVICE_ID}" shell monkey -p "${PKG_NAME}" -c android.intent.category.LAUNCHER 1

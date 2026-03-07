@@ -2,6 +2,8 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router';
 import { IonicVue } from '@ionic/vue';
+import { Capacitor } from '@capacitor/core'
+import { initLogger, logger } from '@/lib/logger'
 
 
 /* Core CSS required for Ionic components to work properly */
@@ -27,7 +29,12 @@ import './theme/variables.css';
 const app = createApp(App)
   .use(IonicVue)
   .use(router);
-  
+
+// Init logger early; never block app startup.
+initLogger({ platform: Capacitor.getPlatform() })
+  .then(() => logger.info('[app] start', { platform: Capacitor.getPlatform() }))
+  .catch(() => {})
+   
 router.isReady().then(() => {
   app.mount('#app');
 });
