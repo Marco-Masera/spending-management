@@ -15,6 +15,7 @@
         :key="item._id"
         :expense="item"
         @edit="$emit('edit', item)"
+        @delete="$emit('delete', item)"
       />
     </div>
   </section>
@@ -44,7 +45,7 @@ export default defineComponent({
       default: 'No recurring expenses found.',
     },
   },
-  emits: ['edit'],
+  emits: ['edit', 'delete'],
   components: {
     IonSpinner,
     RecurringExpenseRow,

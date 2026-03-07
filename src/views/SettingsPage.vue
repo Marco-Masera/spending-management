@@ -144,6 +144,7 @@
     :loading="isRecurringLoading"
     :empty-message="showAllRecurring ? 'No recurring expenses yet.' : 'No active recurring expenses right now.'"
     @edit="openEditRecurringExpenseForm"
+    @delete="confirmDeleteRecurringExpense"
   />
 </div>
 
@@ -309,6 +310,53 @@ export default defineComponent({
       this.$data.recurringFormMode = 'edit-end'
       this.$data.selectedRecurringExpense = expense
       this.$data.isRecurringFormOpen = true
+    },
+    async confirmDeleteRecurringExpense(expense: RecurringExpense){
+      const alert = await alertController.create({
+        header: 'Delete recurring expense?',
+        message: `Delete the recurring expense for ${expense.category}? This cannot be undone.`,
+        buttons: [
+          {
+            text: 'Cancel',
+            role: 'cancel',
+          },
+          {
+            text: 'Delete',
+            role: 'destructive',
+            handler: () => {
+              this.deleteRecurringExpense(expense)
+            },
+          },
+        ],
+      })
+
+      await alert.present()
+      await alert.onDidDismiss()
+    },
+    async deleteRecurringExpense(expense: RecurringExpense){
+      if (this.$data.isRecurringSaving) {
+        return
+      }
+
+      this.$data.isRecurringSaving = true
+      try {
+        const removed = await model.remove_recurring_expense(expense._id)
+        if (!removed) {
+          this.presentToast('Could not delete recurring expense', 2500)
+          return
+        }
+
+        if (this.$data.selectedRecurringExpense?._id === expense._id) {
+          this.closeRecurringExpenseForm()
+        }
+
+        this.presentToast('Recurring expense deleted')
+        await this.loadRecurringExpenses()
+      } catch {
+        this.presentToast('Could not delete recurring expense', 2500)
+      } finally {
+        this.$data.isRecurringSaving = false
+      }
     },
     closeRecurringExpenseForm(){
       this.$data.isRecurringFormOpen = false

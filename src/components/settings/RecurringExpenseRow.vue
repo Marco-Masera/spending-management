@@ -23,6 +23,9 @@
     </dl>
 
     <div class="recurring-row__actions">
+      <ion-button color="danger" fill="clear" size="small" @click="$emit('delete', expense)">
+        Delete
+      </ion-button>
       <ion-button fill="outline" size="small" @click="$emit('edit', expense)">
         Edit end time
       </ion-button>
@@ -44,7 +47,7 @@ export default defineComponent({
       required: true,
     },
   },
-  emits: ['edit'],
+  emits: ['edit', 'delete'],
   computed: {
     amountLabel(): string {
       return Number(this.expense.amount).toFixed(2)
