@@ -27,7 +27,7 @@
  </div>
 
     <div class="amountdiv">
-    <ion-item style="width:60%">
+    <ion-item class="floating-input-item" style="width:60%">
       <ion-label position="floating">Your budget:</ion-label>
       <ion-input @click="onInputClick($event)" type="number" v-model="budget.budget" placeholder="0.00 $"></ion-input>
     </ion-item>
@@ -70,7 +70,7 @@
 
 
 <div class="amountdiv" style="margin-top:14px; margin-bottom:24px">
-    <ion-item style="width:60%">
+    <ion-item class="floating-input-item" style="width:60%">
       <ion-label position="floating">Currency:</ion-label>
       <ion-input type="text" v-model="currency" placeholder=""></ion-input>
     </ion-item>
@@ -170,7 +170,7 @@
  </div>
 
  <div class="amountdiv" style="margin-top:14px; margin-bottom:12px">
-    <ion-item style="width:85%">
+    <ion-item class="floating-input-item" style="width:85%">
       <ion-label position="floating">CouchDB URL:</ion-label>
       <ion-input
         type="text"
@@ -202,7 +202,7 @@
 <ion-popover :is-open="isAdding" :event="popoverEvent" @didDismiss="isAdding = false" style="--offset-y: -220px" >
     <ion-content class="ion-padding"><p class="weightened">Add new category</p></ion-content>
         <div style="margin-left:14px; margin-bottom:10px">
-          <ion-item style="width:80%">
+          <ion-item class="floating-input-item" style="width:80%">
             <ion-label position="floating">Name:</ion-label>
             <ion-input v-model="newCatName" placeholder="category"></ion-input>
           </ion-item>

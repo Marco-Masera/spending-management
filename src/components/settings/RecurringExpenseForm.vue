@@ -52,14 +52,9 @@
           <p>Starts {{ formatDate(expense.startDate) }}</p>
         </div>
 
-        <label class="recurring-form__checkbox">
-          <input v-model="hasEndDate" type="checkbox" />
-          <span>{{ mode === 'create' ? 'Set an end time' : 'This recurring expense has an end time' }}</span>
-        </label>
-
-        <label :class="{ 'recurring-form__field--disabled': !hasEndDate }">
+        <label>
           <span>End time</span>
-          <input v-model="endLocal" type="datetime-local" :disabled="!hasEndDate" />
+          <input v-model="endLocal" type="datetime-local" placeholder="Never" />
         </label>
 
         <div class="recurring-form__actions">
@@ -117,7 +112,6 @@ export default defineComponent({
       frequency: 'monthly' as RecurringFrequency,
       interval: 1,
       startLocal: '',
-      hasEndDate: false,
       endLocal: '',
     }
   },
@@ -149,13 +143,12 @@ export default defineComponent({
     },
     canSubmit(): boolean {
       if (this.mode === 'edit-end') {
-        return !this.hasEndDate || this.endLocal !== ''
+        return true
       }
 
       if (!this.amount || !this.category || !this.startLocal) return false
       if (!Number.isFinite(Number(this.amount))) return false
       if (!Number.isInteger(Number(this.interval)) || Number(this.interval) < 1) return false
-      if (this.hasEndDate && !this.endLocal) return false
       return true
     },
     summaryLabel(): string {
@@ -180,7 +173,6 @@ export default defineComponent({
         this.frequency = this.expense.frequency
         this.interval = this.expense.interval
         this.startLocal = this.toLocalDateTime(this.expense.startDate)
-        this.hasEndDate = this.expense.endDate !== null
         this.endLocal = this.expense.endDate ? this.toLocalDateTime(this.expense.endDate) : ''
         return
       }
@@ -190,7 +182,6 @@ export default defineComponent({
       this.frequency = 'monthly'
       this.interval = 1
       this.startLocal = this.toLocalDateTime(new Date(Date.now()))
-      this.hasEndDate = false
       this.endLocal = ''
     },
     toLocalDateTime(date: Date): string {
@@ -215,7 +206,7 @@ export default defineComponent({
 
       if (this.mode === 'edit-end') {
         this.$emit('save', {
-          endDate: this.hasEndDate ? new Date(this.endLocal) : null,
+          endDate: this.endLocal ? new Date(this.endLocal) : null,
         })
         return
       }
@@ -228,7 +219,7 @@ export default defineComponent({
         startDate: new Date(this.startLocal),
       }
 
-      if (this.hasEndDate) {
+      if (this.endLocal) {
         payload.endDate = new Date(this.endLocal)
       }
 
@@ -318,6 +309,11 @@ export default defineComponent({
   font: inherit;
 }
 
+.recurring-form option {
+  background: var(--ion-background-color);
+  color: var(--ion-text-color);
+}
+
 .recurring-form input:disabled {
   background: rgba(var(--ion-color-step-150-rgb), 0.25);
   color: rgba(var(--ion-text-color-rgb), 0.4);
@@ -329,17 +325,6 @@ export default defineComponent({
   gap: 16px;
 }
 
-.recurring-form__checkbox {
-  display: flex !important;
-  align-items: center;
-  gap: 10px;
-}
-
-.recurring-form__checkbox input {
-  width: auto;
-  margin: 0;
-}
-
 .recurring-form__summary {
   display: grid;
   gap: 6px;
@@ -347,10 +332,6 @@ export default defineComponent({
   border-radius: 8px;
   border: 1px solid rgba(var(--ion-color-medium-rgb), 0.2);
   background: rgba(var(--ion-color-step-100-rgb), 0.35);
-}
-
-.recurring-form__field--disabled {
-  opacity: 0.72;
 }
 
 .recurring-form__actions {
@@ -371,6 +352,14 @@ export default defineComponent({
 
   .recurring-form__actions {
     flex-direction: column-reverse;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .recurring-form input,
+  .recurring-form select,
+  .recurring-form option {
+    color-scheme: dark;
   }
 }
 </style>
