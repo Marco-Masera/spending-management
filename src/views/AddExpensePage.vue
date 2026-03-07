@@ -19,7 +19,7 @@
       
 
     <div class="amountdiv">
-    <ion-item style="width:60%">
+    <ion-item class="floating-input-item" style="width:60%">
       <ion-label position="floating">Amount:</ion-label>
       <ion-input @click="onInputClick($event)" type="number" v-model="amount" placeholder="0.00"></ion-input>
     </ion-item>
@@ -56,7 +56,7 @@
 <ion-popover :is-open="isAdding" :event="popoverEvent" @didDismiss="isAdding = false" style="--offset-y: -220px" >
     <ion-content class="ion-padding"><p class="weightened">Add new category</p></ion-content>
         <div style="margin-left:14px; margin-bottom:10px">
-          <ion-item style="width:80%">
+          <ion-item class="floating-input-item" style="width:80%">
             <ion-label position="floating">Name:</ion-label>
             <ion-input v-model="newCatName" placeholder="category"></ion-input>
           </ion-item>
