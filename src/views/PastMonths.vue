@@ -17,7 +17,7 @@
         </ion-toolbar>
       </ion-header>
       
-      <ion-card v-for="month in months" :key="month" @click="goToPast(month.month, month.year)">
+       <ion-card v-for="month in months" :key="`${month.month}-${month.year}`" @click="goToPast(month.month, month.year)">
         <ion-card-header>
           <ion-card-title>{{month.total_sum}} {{currency}}</ion-card-title>
           <ion-card-subtitle>{{month.date}}</ion-card-subtitle>
@@ -44,18 +44,19 @@
 import { useRouter } from 'vue-router';
 import { IonButtons,IonContent,IonBackButton , IonHeader, IonPage, IonTitle, IonToolbar, IonCard, IonCardContent, IonCardHeader, IonCardSubtitle, IonCardTitle } from '@ionic/vue';
 import { model } from '../data/model'
+import type { ExpenseWithDate } from '../data/model'
 import { defineComponent } from 'vue';
 import { closeCircle } from 'ionicons/icons';
 
 export default defineComponent({
-  name: 'HomePage',
+  name: 'PastMonths',
   setup(){
     const router = useRouter();
     return { router, closeCircle };
   },
   data() {
     return {
-      months: [],
+      months: [] as ExpenseWithDate[],
       currency: "",
       getBackButtonText: () => {
         const win = window as any;
