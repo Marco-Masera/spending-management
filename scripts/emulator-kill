@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+AVD_NAME="${SMT_EMULATOR_AVD_NAME:-spending_api35}"
+
+if ! command -v adb >/dev/null 2>&1; then
+  echo "adb not found in PATH" >&2
+  exit 1
+fi
+
+# Best-effort: close any running emulator for this AVD.
+#
+# Why: if an older emulator instance is still around, tooling like Capacitor/native-run
+# can end up racing between multiple emulator-* serials.
+
+is_avd_running() {
+  mapfile -t EMULATOR_SERIALS < <(adb devices | awk 'NR>1 && $1 ~ /^emulator-/ {print $1}')
+  if [[ "${#EMULATOR_SERIALS[@]}" -eq 0 ]]; then
+    return 1
+  fi
+
+  for serial in "${EMULATOR_SERIALS[@]}"; do
+    out="$(adb -s "${serial}" emu avd name 2>/dev/null || true)"
+    name="$(printf '%s\n' "${out}" | tr -d '\r' | awk 'tolower($0)!="ok" && $0!="" {print $0; exit}')"
+    if [[ -n "${name}" && "${name}" == "${AVD_NAME}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+if ! is_avd_running; then
+  exit 0
+fi
+
+matched=0
+mapfile -t EMULATOR_SERIALS < <(adb devices | awk 'NR>1 && $1 ~ /^emulator-/ {print $1}')
+for serial in "${EMULATOR_SERIALS[@]}"; do
+  out="$(adb -s "${serial}" emu avd name 2>/dev/null || true)"
+  name="$(printf '%s\n' "${out}" | tr -d '\r' | awk 'tolower($0)!="ok" && $0!="" {print $0; exit}')"
+  if [[ -n "${name}" && "${name}" == "${AVD_NAME}" ]]; then
+    matched=1
+    adb -s "${serial}" emu kill >/dev/null 2>&1 || true
+  fi
+done
+
+if [[ "${matched}" -eq 0 ]]; then
+  exit 0
+fi
+
+# Wait a bit for the emulator to go away.
+for _ in $(seq 1 30); do
+  if ! is_avd_running; then
+    break
+  fi
+  sleep 1
+done
+
+# Last resort: kill host processes for this AVD.
+pkill -f "emulator.*-avd ${AVD_NAME}" >/dev/null 2>&1 || true
+pkill -f "qemu.*-avd ${AVD_NAME}" >/dev/null 2>&1 || true

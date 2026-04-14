@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+"${ROOT_DIR}/scripts/require-emulator"
+
+DEVICE_ID="$("${ROOT_DIR}/scripts/emulator-device-id")"
+
+if [[ "$#" -eq 0 ]]; then
+  exec adb -s "${DEVICE_ID}" logcat -v time
+fi
+
+exec adb -s "${DEVICE_ID}" logcat "$@"
