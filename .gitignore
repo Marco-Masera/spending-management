@@ -31,6 +31,6 @@ npm-debug.log*
 /platforms
 /plugins
 /www
-/android
+
 /.couchdb/
 /.vend/
