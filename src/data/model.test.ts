@@ -379,10 +379,11 @@ describe('pouchdb-backed model', () => {
     expect(m.get_sync_status()).toEqual({ state: 'ok', error: '' })
 
     await m.set_couchdb_url('https://user:pass@offline:5984/spending')
+    expect(m.db.sync).toHaveBeenCalledTimes(2)
     expect(m.get_sync_status()).toEqual({ state: 'error', error: 'Could not connect to CouchDB.' })
 
     await m.set_couchdb_url('')
-    expect(handler.cancel).toHaveBeenCalledTimes(1)
+    expect(handler.cancel).toHaveBeenCalledTimes(2)
     expect(m.get_sync_status()).toEqual({ state: 'not_configured', error: '' })
 
     await m.__test_destroy_db()

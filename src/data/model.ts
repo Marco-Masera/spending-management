@@ -756,39 +756,11 @@ async function putIfMissing(db: any, doc: any): Promise<boolean> {
   return true;
 }
 
-let cordovaSqliteRegistered = false;
-
-async function openDb(dbName: string, platform: string) {
-  if (platform === "android") {
-    try {
-      if (!cordovaSqliteRegistered) {
-        const mod: any = await import("pouchdb-adapter-cordova-sqlite");
-        PouchDB.plugin(mod?.default ?? mod);
-        cordovaSqliteRegistered = true;
-      }
-      try {
-        const db = new PouchDB(dbName, {
-          adapter: "cordova-sqlite",
-          // Required by cordova-sqlite-storage.
-          location: "default",
-          // Cannot have both defined
-          // iosDatabaseLocation: 'Library',
-        });
-        // Ensure the adapter actually opened successfully; some failures surface during setup.
-        await db.info();
-        logger.info(`[db] opened adapter=cordova-sqlite name=${dbName}`);
-        return db;
-      } catch (e) {
-        logger.warn("[db] sqlite failed, falling back", e);
-      }
-    } catch (e) {
-      logger.warn("[db] sqlite adapter load failed, falling back", e);
-    }
-  }
+function openDb(dbName: string, platform: string) {
+  // PouchDB's default adapter (IndexedDB) is used on every platform, including
+  // Android, where the system WebView provides a reliable IndexedDB implementation.
   const db = new PouchDB(dbName);
-  if (platform === "android") {
-    logger.info(`[db] opened adapter=fallback name=${dbName}`);
-  }
+  logger.info(`[db] opened adapter=idb name=${dbName} platform=${platform}`);
   return db;
 }
 

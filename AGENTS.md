@@ -22,4 +22,6 @@ This is an ionic + vue app for spending management for android.
 
 
 ## Agent Notes
+- The Android gradle build only works inside the nix flake (JDK 21 + Android SDK). With an ambient newer JDK it fails early with `Unsupported class file major version 69` (Gradle 8.11.1 does not support Java 25). When nix is unavailable, verify with `npm run checks`, `npm run tests`, `npm run web:build`, and `npx cap sync android` instead of `npm run build`.
+- `npm audit` reports 4 moderate `uuid` advisories (GHSA-w5hq-g745-h8pq) that cannot be fixed without harm: `pouchdb-browser@9` (latest) depends on `uuid@8` but only uses safe v4 IDs, and the other is under `@capacitor/cli`'s iOS-only `xcode` tooling. `npm audit fix --force` would downgrade pouchdb-browser to 6.x — do not run it.
  
